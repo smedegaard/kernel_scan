@@ -57,7 +57,7 @@ class ComposableKernelEngine(ComputeEngine):
             return True
 
         # Try to find ckProfiler executable
-        profiler_path = self._find_profiler()
+        profiler_path = self._find_profiler(self.config.custom_profiler_path)
         if not profiler_path:
             # Try user-provided path in config
             if "profiler_path" in self.config.engine_config:
@@ -223,7 +223,7 @@ class ComposableKernelEngine(ComputeEngine):
 
         return self._hardware_info
 
-    def _find_profiler(self) -> Optional[str]:
+    def _find_profiler(self, path: Optional[str]) -> Optional[str]:
         """
         Find the ckProfiler executable.
 
@@ -237,6 +237,11 @@ class ComposableKernelEngine(ComputeEngine):
             "/opt/rocm/bin/ckProfiler",
             "/usr/local/bin/ckProfiler",
         ]
+
+        if path:
+            expanded_path = os.path.expanduser(path)
+            if os.path.exists(expanded_path):
+                return expanded_path
 
         for path in common_paths:
             expanded_path = os.path.expanduser(path)

@@ -15,6 +15,7 @@ class ProfileConfig:
     Configuration for profiling behavior.
 
     Attributes:
+        custom_profiler_path: Optional path to ckProfiler. If not passed, kernel_spec will try to find it automatically.
         iterations: Number of iterations to run for profiling
         warmup_iterations: Number of warmup iterations to run
         verify_results: Whether to verify results against reference implementation
@@ -29,6 +30,7 @@ class ProfileConfig:
         extra_params: Additional configuration parameters
     """
 
+    custom_profiler_path: Optional[str] = None
     iterations: int = 100
     warmup_iterations: int = 10
     verify_results: bool = True
@@ -82,6 +84,11 @@ class ConfigBuilder:
     def __init__(self):
         """Initialize a new ConfigBuilder with default values."""
         self._config = ProfileConfig.create_default()
+
+    def custom_profiler_path(self, path: Optional[str]) -> "ConfigBuilder":
+        """Set the custom profiler path."""
+        self._config.custom_profiler_path = path
+        return self
 
     def iterations(self, count: int) -> "ConfigBuilder":
         """Set the number of profiling iterations."""
