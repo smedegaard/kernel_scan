@@ -39,6 +39,7 @@ class DataType(Enum):
     INT16 = auto()  # 16-bit integer (signed)
     INT32 = auto()  # 32-bit integer (signed)
     INT64 = auto()  # 64-bit integer (signed)
+    INT4 = auto()  # 4-bit integer (signed) - used in AI accelerators
     BOOL = auto()  # 8-bit boolean (0 or 1)
 
     @classmethod
@@ -54,9 +55,53 @@ class DataType(Enum):
             cls.INT16: "i16",
             cls.INT32: "i32",
             cls.INT64: "i64",
+            cls.INT4: "i8",  # Polars doesn't support i4 natively
             cls.BOOL: "bool",
         }
         return mapping.get(dtype, "f32")
+
+    @classmethod
+    def from_string(cls, format_str: str) -> "DataType":
+        """Convert string to DataType enum."""
+        format_map = {
+            "fp64": cls.FLOAT64,
+            "float64": cls.FLOAT64,
+            "double": cls.FLOAT64,
+            "fp32": cls.FLOAT32,
+            "float32": cls.FLOAT32,
+            "float": cls.FLOAT32,
+            "fp16": cls.FLOAT16,
+            "float16": cls.FLOAT16,
+            "half": cls.FLOAT16,
+            "bf16": cls.BFLOAT16,
+            "bfloat16": cls.BFLOAT16,
+            "int8": cls.INT8,
+            "i8": cls.INT8,
+            "uint8": cls.UINT8,
+            "u8": cls.UINT8,
+            "int16": cls.INT16,
+            "i16": cls.INT16,
+            "int32": cls.INT32,
+            "i32": cls.INT32,
+            "int64": cls.INT64,
+            "i64": cls.INT64,
+            "int4": cls.INT4,
+            "i4": cls.INT4,
+            "bool": cls.BOOL,
+            "boolean": cls.BOOL,
+        }
+
+        # Try direct lookup
+        if isinstance(format_str, str):
+            key = format_str.lower()
+            if key in format_map:
+                return format_map[key]
+
+        # Try to match enum name
+        try:
+            return cls[format_str.upper()]
+        except (KeyError, AttributeError):
+            raise ValueError(f"Unknown data type: {format_str}")
 
 
 @dataclass
