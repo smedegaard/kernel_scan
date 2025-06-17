@@ -60,17 +60,21 @@ def calculate_gemm_roofline_data(
     ):
         df = df.with_columns([(pl.col("tflops") * 1000).alias("gflops")])
 
-    # Calculate arithmetic intensity
+    # Calculate GEMM operations and data movement
     df = df.with_columns(
         [
+            # Calculate FLOPs for GEMM
+            (pl.col("M") * pl.col("N") * pl.col("K") * 2).alias("flops"),
+            # Calculate memory accesses in bytes (assuming each element is 4 bytes for float32)
             (
-                (pl.col("M") * pl.col("N") * pl.col("K"))
-                / (
+                (
                     pl.col("M") * pl.col("K")
                     + pl.col("N") * pl.col("K")
                     + pl.col("M") * pl.col("N")
                 )
-            ).alias("gemm_arithmetic_intensity"),
+                * 4
+            ).alias("bytes_accessed"),
+            # Add group column for labeling
             (
                 pl.col("M").cast(pl.Utf8)
                 + "_"
@@ -78,6 +82,30 @@ def calculate_gemm_roofline_data(
                 + "_"
                 + pl.col("K").cast(pl.Utf8)
             ).alias("group"),
+        ]
+    )
+
+    # Calculate the original arithmetic intensity (for backward compatibility)
+    df = df.with_columns(
+        [
+            (pl.col("flops") / pl.col("bytes_accessed")).alias(
+                "gemm_arithmetic_intensity"
+            )
+        ]
+    )
+
+    # Calculate performance to bandwidth ratio (TFLOPS/GB/s)
+    df = df.with_columns(
+        [
+            # Calculate actual bandwidth used (GB/s)
+            (pl.col("bytes_accessed") / (pl.col("time_ms") * 1e-3) / 1e9).alias(
+                "actual_bandwidth_gbps"
+            ),
+            # Calculate TFLOPS/GB/s ratio
+            (
+                pl.col("tflops")
+                / (pl.col("bytes_accessed") / (pl.col("time_ms") * 1e-3) / 1e9)
+            ).alias("tflops_per_gbps"),
         ]
     )
 
@@ -98,6 +126,9 @@ def calculate_gemm_roofline_data(
             ).alias("attainable_performance")
         ]
     )
+
+    log.debug("Calculating attainable performance")
+    log.debug(df["attainable_performance"])
 
     # For convenience, add time in ms if it's not already there
     if "avg_kernel_time_ms" in df.columns and "time_ms" not in df.columns:
@@ -135,7 +166,7 @@ def generate_gemm_roofline_plots_by_group(
     """
 
     # Extract DataFrame from ProfileResultSet
-    df = result_set.dataframe
+    df = calculate_gemm_roofline_data(result_set)
 
     log.debug(f"DataFrame columns: {df.columns}")
     log.debug(f"DataFrame sample: {df.head(2)}")
@@ -173,12 +204,13 @@ def generate_gemm_roofline_plots_by_group(
 
     for group in groups:
         group_df = df.filter(pl.col(group_by) == group)
-        group_df = group_df.sort("gemm_arithmetic_intensity")
+        # Sort by the new metric for the plot
+        group_df = group_df.sort("tflops_per_gbps")
 
         # Create individual figure for each group
         fig = px.scatter(
             group_df,  # Use the DataFrame directly instead of converting to dicts
-            x="gemm_arithmetic_intensity",
+            x="tflops_per_gbps",  # Use the new metric for x-axis
             y="tflops",
             log_x=True,
             log_y=True,
@@ -193,7 +225,7 @@ def generate_gemm_roofline_plots_by_group(
             #     "K": True,
             # },
             labels={
-                "gemm_arithmetic_intensity": "Arithmetic Intensity (FLOPs/Byte)",
+                "tflops_per_gbps": "Performance/Bandwidth Ratio (TFLOPS/GB/s)",  # New x-axis label
                 "tflops": f"Performance (TFLOPs - {precision_name})",
                 "time_ms": "Execution Time (ms)",
             },
@@ -201,24 +233,23 @@ def generate_gemm_roofline_plots_by_group(
             height=600,
         )
 
-        # Add roofline
+        # Modify the roofline to work with the new x-axis
         x_values = group_df["gemm_arithmetic_intensity"].to_list()
-        y_values = group_df["attainable_performance"].to_list()
+        y_values = group_df[
+            "attainable_performance"
+        ].to_list()  # Use actual performance values
 
-        # Ensure we have enough values for the roofline
-        if x_values and y_values:
-            fig.add_trace(
-                go.Scatter(
-                    x=x_values,
-                    y=y_values,
-                    mode="lines",
-                    line=dict(color="red", width=2, dash="dash"),
-                    opacity=0.7,
-                    name="Roofline",
-                )
+        # Add the roofline as a reference
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=y_values,
+                mode="lines",
+                line=dict(color="tomato", width=2),
+                opacity=0.7,
+                name="Roofline",
             )
-        else:
-            log.warning(f"Not enough data to draw roofline for group {group}")
+        )
 
         figures[str(group)] = fig
 
