@@ -12,7 +12,7 @@ from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 log = logging.getLogger(__name__)
 
@@ -31,9 +31,9 @@ try:
         OperationType,
         Profiler,
     )
-    from kernel_scan.core import AcceleratorSpecs
     from kernel_scan.core.types import TensorSpec
     from kernel_scan.ops import GemmParams
+    from kernel_scan.visualization import generate_gemm_roofline_plots_by_group
 except ImportError as e:
     log.error(f"Error importing kernel_scan: {e}")
     log.error(
@@ -76,31 +76,6 @@ def main():
     )
     log.info("Kernel specification created successfully.")
 
-    # Detect the accelerator hardware
-    # log.info("\nDetecting GPU hardware...")
-    # try:
-    #     # Auto-detect hardware
-    #     accelerator = AcceleratorSpecs.detect_hardware()
-    #     log.info(f"Detected GPU: {accelerator.name}")
-    #     log.info(f"Memory: {accelerator.memory_size_gb} GB")
-    #     log.info(
-    #         f"Peak Memory Bandwidth: {accelerator.peak_memory_bandwidth_gbps} GB/s"
-    #     )
-
-    #     # Display peak performance for different precisions
-    #     for dtype, tflops in accelerator.peak_performance.items():
-    #         log.info(f"Peak Performance ({dtype.name}): {tflops} TFLOPS")
-
-    #     # Show any additional specs
-    #     if accelerator.additional_specs:
-    #         log.info("Additional Hardware Specifications:")
-    #         for key, value in accelerator.additional_specs.items():
-    #             log.info(f"  {key}: {value}")
-    # except Exception as e:
-    #     log.warning(f"Could not detect GPU hardware: {e}")
-    #     log.warning("Will continue with default/unknown hardware specifications.")
-    #     accelerator = None
-
     # Profile with a specific engine
     log.info("\nInitializing profiler...")
     profiler = Profiler()
@@ -114,11 +89,16 @@ def main():
             warmup_iterations=2,
             output_file="./results/quickstart.jsonl",
         )
-
-        print(f"number of results: {len(result_set.results)}")
-
     except Exception as e:
         log.error(f"Error during profiling: {e}")
+        raise e
+
+    try:
+        figures = generate_gemm_roofline_plots_by_group(result_set)
+        for group, fig in figures.items():
+            fig.write_image(f"./plots/{group}.png")
+    except Exception as e:
+        log.error(f"Error during plotting: {e}")
         raise e
 
     log.info("\nQuick Start example completed!")

@@ -13,7 +13,6 @@ from kernel_scan.core.config import (
 from kernel_scan.core.results import (
     ProfileResult,
     ProfileResultSet,
-    TimingData,
 )
 from kernel_scan.core.specs import (
     KernelSpec,
@@ -77,7 +76,6 @@ __all__ = [
     "KernelSpec",
     "KernelSpecBuilder",
     # Results
-    "TimingData",
     "ProfileResult",
     "ProfileResultSet",
     # Config

@@ -6,80 +6,15 @@ visualizing kernel profiling results.
 """
 
 import logging
-import statistics
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 import polars as pl
 
+from kernel_scan.core.accelerator import AcceleratorSpecs
 from kernel_scan.core.specs import KernelSpec
 
 log = logging.getLogger(__name__)
-
-
-@dataclass
-class TimingData:
-    """
-    Container for timing-related profiling results.
-
-    Attributes:
-        kernel_times_ms: List of kernel execution times in milliseconds
-        warmup_time_ms: Time spent in warmup iterations in milliseconds
-        overhead_time_ms: Time spent in overhead (setup, teardown, etc.) in milliseconds
-        num_iterations: Number of timing iterations performed
-        num_warmup: Number of warmup iterations performed
-        timestamp: When the profiling was performed
-    """
-
-    kernel_times_ms: List[float]
-    warmup_time_ms: Optional[float] = None
-    overhead_time_ms: Optional[float] = None
-    num_iterations: int = 0
-    num_warmup: int = 0
-    timestamp: datetime = field(default_factory=datetime.now)
-
-    @property
-    def avg_kernel_time_ms(self) -> float:
-        """Average kernel execution time in milliseconds."""
-        if not self.kernel_times_ms:
-            return 0.0
-        return statistics.mean(self.kernel_times_ms)
-
-    @property
-    def min_kernel_time_ms(self) -> float:
-        """Minimum kernel execution time in milliseconds."""
-        if not self.kernel_times_ms:
-            return 0.0
-        return min(self.kernel_times_ms)
-
-    @property
-    def max_kernel_time_ms(self) -> float:
-        """Maximum kernel execution time in milliseconds."""
-        if not self.kernel_times_ms:
-            return 0.0
-        return max(self.kernel_times_ms)
-
-    @property
-    def median_kernel_time_ms(self) -> float:
-        """Median kernel execution time in milliseconds."""
-        if not self.kernel_times_ms:
-            return 0.0
-        return statistics.median(self.kernel_times_ms)
-
-    @property
-    def stddev_kernel_time_ms(self) -> float:
-        """Standard deviation of kernel execution times in milliseconds."""
-        if len(self.kernel_times_ms) < 2:
-            return 0.0
-        return statistics.stdev(self.kernel_times_ms)
-
-    @property
-    def cv_percent(self) -> float:
-        """Coefficient of variation as a percentage."""
-        if self.avg_kernel_time_ms == 0:
-            return 0.0
-        return (self.stddev_kernel_time_ms / self.avg_kernel_time_ms) * 100
 
 
 @dataclass
@@ -89,7 +24,6 @@ class ProfileResult:
 
     Attributes:
         kernel_spec: The kernel specification that was profiled
-        timing: Timing data from the profiling run
         metrics: Additional metrics (e.g., GFLOPS, bandwidth)
         operation: Detailed operation description
         verification_result: Result of output verification (if performed)
@@ -98,7 +32,6 @@ class ProfileResult:
     """
 
     kernel_spec: KernelSpec
-    timing: TimingData
     metrics: Dict[str, float] = field(default_factory=dict)
     operation: str = ""
     verification_result: Optional[bool] = None
@@ -107,45 +40,66 @@ class ProfileResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the profile result to a dictionary for serialization."""
+        # If raw_data is already populated with all the needed info, use it directly
+        if self.raw_data and all(
+            key in self.raw_data for key in ["operation", "time_ms", "tflops"]
+        ):
+            return self.raw_data.copy()
+
+        # Otherwise, construct the dictionary from the ProfileResult attributes
+        result_dict = {
+            "operation": self.operation or f"{self.kernel_spec.name}",
+            "is_best": self.is_best,
+        }
+
+        # Add metrics
+        result_dict.update(self.metrics)
+
         # Extract operation parameters
-        op_params = {}
         if self.kernel_spec.operation_type.name.lower() == "gemm":
             # Extract GEMM parameters
-            params = self.kernel_spec.operation_params.__dict__.get("params", {})
+            params = self.kernel_spec.operation_params
             if hasattr(params, "__dict__"):
                 params_dict = params.__dict__
-                op_params = {
-                    "M": params_dict.get("m", 0),
-                    "N": params_dict.get("n", 0),
-                    "K": params_dict.get("k", 0),
-                    "layout_a": params_dict.get("layout_a", "RowMajor").name.replace(
-                        "_", ""
-                    ),
-                    "layout_b": params_dict.get("layout_b", "RowMajor").name.replace(
-                        "_", ""
-                    ),
-                    "layout_c": params_dict.get("layout_c", "RowMajor").name.replace(
-                        "_", ""
-                    ),
-                }
+                if "params" in params_dict and hasattr(
+                    params_dict["params"], "__dict__"
+                ):
+                    gemm_params = params_dict["params"].__dict__
+                    result_dict.update(
+                        {
+                            "M": gemm_params.get("m", 0),
+                            "N": gemm_params.get("n", 0),
+                            "K": gemm_params.get("k", 0),
+                        }
+                    )
 
-        # Extract data types
+                    # Add layout information if available
+                    for layout_key in ["layout_a", "layout_b", "layout_c"]:
+                        if layout_key in gemm_params and hasattr(
+                            gemm_params[layout_key], "name"
+                        ):
+                            result_dict[layout_key] = gemm_params[
+                                layout_key
+                            ].name.replace("_", "")
+
+        # Add data type information
         data_type = self.kernel_spec.data_type.name.lower()
+        result_dict.update(
+            {
+                "datatype": data_type,
+                "input_datatype": data_type,
+                "weight_datatype": data_type,
+                "output_datatype": data_type,
+                "operation_type": self.kernel_spec.operation_type.name.lower(),
+            }
+        )
 
-        return {
-            "operation": self.operation or f"{self.kernel_spec.name}",
-            "time_ms": self.timing.avg_kernel_time_ms,
-            "tflops": self.metrics.get("tflops", 0.0),
-            "gb_per_sec": self.metrics.get("bandwidth", 0.0),
-            "is_best": self.is_best,
-            "timestamp": self.timing.timestamp.isoformat(),
-            "datatype": data_type,
-            "input_datatype": data_type,
-            "weight_datatype": data_type,
-            "output_datatype": data_type,
-            "operation_type": self.kernel_spec.operation_type.name.lower(),
-            **op_params,
-        }
+        # Add timestamp (use current time if not available)
+        from datetime import datetime
+
+        result_dict["timestamp"] = datetime.now().isoformat()
+
+        return result_dict
 
 
 class ProfileResultSet:
@@ -156,7 +110,11 @@ class ProfileResultSet:
     profiling results using Polars DataFrames.
     """
 
-    def __init__(self, results: Optional[List[ProfileResult]] = None):
+    def __init__(
+        self,
+        results: Optional[List[ProfileResult]] = None,
+        accelerator_specs: AcceleratorSpecs = AcceleratorSpecs(),
+    ):
         """
         Initialize a new ProfileResultSet.
 
@@ -167,7 +125,7 @@ class ProfileResultSet:
         self._df = None
         self._engine_name = "unknown"
         self._engine_info = {}
-        self._hardware_info = {}
+        self.accelerator_specs = accelerator_specs
 
     @property
     def engine_name(self) -> str:
@@ -227,19 +185,13 @@ class ProfileResultSet:
         return self._results
 
     @property
-    def dataframe(self) -> Union["pl.DataFrame", List[Dict[str, Any]]]:
+    def dataframe(self) -> pl.DataFrame:
         """
         Get a Polars DataFrame of all results.
         """
-        if self._df is None or len(self._df) != len(self._results):
-            if not self._results:
-                return pl.DataFrame()
-
-            # Convert all results to dictionaries
-            data = [result.to_dict() for result in self._results]
-
-            # Create DataFrame
-            self._df = pl.DataFrame(data)
+        data = [result.to_dict() for result in self._results]
+        # Create DataFrame
+        self._df = pl.DataFrame(data)
 
         return self._df
 

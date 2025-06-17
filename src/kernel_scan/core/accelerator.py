@@ -163,6 +163,7 @@ class AcceleratorSpecs:
         Returns:
             Peak compute performance in TFLOPS
         """
+
         if precision in self.peak_performance:
             return self.peak_performance[precision]
         else:

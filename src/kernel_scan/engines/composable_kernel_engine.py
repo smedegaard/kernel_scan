@@ -10,13 +10,12 @@ import logging
 import os
 import subprocess
 import tempfile
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from kernel_scan.core.accelerator import AcceleratorSpecs
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import ComputeEngine
-from kernel_scan.core.results import ProfileResult, ProfileResultSet, TimingData
+from kernel_scan.core.results import ProfileResult, ProfileResultSet
 from kernel_scan.core.specs import KernelSpec
 from kernel_scan.core.types import (
     DataType,
@@ -179,7 +178,7 @@ class ComposableKernelEngine(ComputeEngine):
             ]
 
             # Create result set with the profile results
-            result_set = ProfileResultSet(profile_results)
+            result_set = ProfileResultSet(profile_results, self.accelerator_specs)
 
             # Set engine and hardware info
             result_set.engine_name = "ComposableKernel"
@@ -358,6 +357,7 @@ class ComposableKernelEngine(ComputeEngine):
         n = str(params.n)
         k = str(params.k)
 
+        # todo: take strides as parameters
         # Map layout to stride calculation
         stride_map = {
             # For matrix A
@@ -459,14 +459,6 @@ class ComposableKernelEngine(ComputeEngine):
             ]
             kernel_times_ms.extend(times)
 
-        # Create timing data
-        timing = TimingData(
-            kernel_times_ms=kernel_times_ms,
-            warmup_time_ms=None,  # We don't have this information
-            num_iterations=len(kernel_times_ms),
-            num_warmup=self.config.warmup_iterations,
-        )
-
         # Extract metrics
         metrics = {}
 
@@ -478,42 +470,16 @@ class ComposableKernelEngine(ComputeEngine):
             metrics["tflops"] = (
                 float(profile_data["gflops"]) / 1000.0
             )  # Convert to TFLOPS
-        else:
-            # Calculate GFLOPS based on the kernel specification
-            gemm_params = kernel_spec.operation_params
-            if isinstance(gemm_params, GemmOperationParams):
-                params = gemm_params.params
-                flops = (
-                    2 * params.m * params.n * params.k
-                )  # 2 operations per multiply-add
-                avg_time_ms = timing.avg_kernel_time_ms
-                if avg_time_ms > 0:
-                    metrics["tflops"] = (flops / 1e12) / (avg_time_ms / 1000)
 
         # Add bandwidth metric if available
         if "bandwidth" in profile_data:
             metrics["bandwidth"] = float(profile_data["bandwidth"])
-        else:
-            # Calculate bandwidth based on the kernel specification
-            gemm_params = kernel_spec.operation_params
-            if isinstance(gemm_params, GemmOperationParams):
-                params = gemm_params.params
-                data_size_bytes = (
-                    params.m * params.k + params.k * params.n + params.m * params.n
-                ) * self._get_data_type_size(kernel_spec.data_type)
-                avg_time_ms = timing.avg_kernel_time_ms
-                if avg_time_ms > 0:
-                    metrics["bandwidth"] = (data_size_bytes / 1e9) / (
-                        avg_time_ms / 1000
-                    )
 
         # Create profile result
         return ProfileResult(
             kernel_spec=kernel_spec,
-            timing=timing,
             metrics=metrics,
             operation=operation,
-            verification_result=None,  # We don't have this information
             raw_data=profile_data,
         )
 
@@ -682,13 +648,10 @@ class CkProfilerScanner:
                             )
 
                     except Exception as e:
-                        print(f"  ✗ Failed for M={m}, N={n}, K={k}: {e}")
+                        log.error(f"  ✗ Failed for M={m}, N={n}, K={k}: {e}")
+                        raise e
 
         print("")
         print("Scan completed!")
-
-        # Save summary if output directory is specified
-        if output_dir:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         return self.results
