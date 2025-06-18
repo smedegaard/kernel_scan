@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from typing import Any, Dict, List, Optional
 
-from kernel_scan.core.accelerator import AcceleratorSpecs
+from kernel_scan.core.accelerator import AcceleratorSpec
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import ComputeEngine
 from kernel_scan.core.results import ProfileResult, ProfileResultSet
@@ -41,7 +41,7 @@ class ComposableKernelEngine(ComputeEngine):
     def __init__(
         self,
         config: Optional[ProfileConfig] = None,
-        accelerator_specs: Optional[AcceleratorSpecs] = None,
+        accelerator_specs: Optional[AcceleratorSpec] = None,
     ):
         """
         Initialize the Composable Kernel engine.
@@ -83,7 +83,7 @@ class ComposableKernelEngine(ComputeEngine):
         # Set accelerator specs if not provided
         if self._accelerator_specs is None:
             # Auto-detect hardware
-            self._accelerator_specs = AcceleratorSpecs.detect_hardware()
+            self._accelerator_specs = AcceleratorSpec.detect_hardware()
             log.info(f"Detected hardware: {self._accelerator_specs.name}")
         else:
             log.info(f"Using provided hardware specs: {self._accelerator_specs.name}")

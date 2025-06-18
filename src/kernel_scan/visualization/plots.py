@@ -233,11 +233,8 @@ def generate_gemm_roofline_plots_by_group(
             height=600,
         )
 
-        # Modify the roofline to work with the new x-axis
         x_values = group_df["gemm_arithmetic_intensity"].to_list()
-        y_values = group_df[
-            "attainable_performance"
-        ].to_list()  # Use actual performance values
+        y_values = group_df["attainable_performance"].to_list()
 
         # Add the roofline as a reference
         fig.add_trace(

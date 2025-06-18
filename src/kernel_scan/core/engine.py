@@ -10,7 +10,7 @@ import abc
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union
 
-from kernel_scan.core import AcceleratorSpecs
+from kernel_scan.core import AcceleratorSpec
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.specs import KernelSpec
@@ -34,7 +34,7 @@ class ComputeEngine(abc.ABC):
     def __init__(
         self,
         config: Optional[ProfileConfig] = None,
-        accelerator_specs: Optional[AcceleratorSpecs] = None,
+        accelerator_specs: Optional[AcceleratorSpec] = None,
     ):
         """
         Initialize the compute engine.
@@ -58,7 +58,7 @@ class ComputeEngine(abc.ABC):
         return self._config
 
     @property
-    def accelerator_specs(self) -> AcceleratorSpecs:
+    def accelerator_specs(self) -> AcceleratorSpec:
         """Return the accelerator specifications for the engine."""
         return self._accelerator_specs
 
@@ -154,7 +154,7 @@ class ComputeEngine(abc.ABC):
 def create_engine(
     engine_type: Union[EngineType, str],
     config: Optional[ProfileConfig] = None,
-    accelerator_specs: Optional[AcceleratorSpecs] = None,
+    accelerator_specs: Optional[AcceleratorSpec] = None,
 ) -> ComputeEngine:
     """
     Factory function for creating engine instances.

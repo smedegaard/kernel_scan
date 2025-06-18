@@ -126,7 +126,7 @@ GPU_SPECS = {
 
 
 @dataclass
-class AcceleratorSpecs:
+class AcceleratorSpec:
     """
     Accelerator hardware specifications for performance analysis.
 
@@ -173,18 +173,18 @@ class AcceleratorSpecs:
             return self.peak_performance.get(DataType.FLOAT32, 0.0)
 
     @staticmethod
-    def detect_hardware() -> "AcceleratorSpecs":
+    def detect_hardware() -> "AcceleratorSpec":
         """
-        Detect GPU hardware information and create an AcceleratorSpecs instance.
+        Detect GPU hardware information and create an AcceleratorSpec instance.
 
         This method attempts to identify the GPU hardware by querying system tools
-        and creates an AcceleratorSpecs instance with the detected values.
+        and creates an AcceleratorSpec instance with the detected values.
 
         Returns:
-            AcceleratorSpecs instance with detected hardware information
+            AcceleratorSpec instance with detected hardware information
         """
         # Start with unknown values
-        specs = AcceleratorSpecs()
+        specs = AcceleratorSpec()
 
         # Try to detect the GPU from system
         detected_vendor = None
@@ -224,15 +224,15 @@ class AcceleratorSpecs:
 
         # todo: If AMD detection failed, try NVIDIA GPUs
 
-        # If we detected a known GPU, update the AcceleratorSpecs
+        # If we detected a known GPU, update the AcceleratorSpec
         if detected_vendor and detected_model:
             log.info(
                 f"Found matching GPU model: {detected_model} from vendor {detected_vendor}"
             )
             gpu_specs = GPU_SPECS[detected_vendor][detected_model]
 
-            # Create AcceleratorSpecs with detected values
-            specs = AcceleratorSpecs(
+            # Create AcceleratorSpec with detected values
+            specs = AcceleratorSpec(
                 name=gpu_specs["name"],
                 peak_memory_bandwidth_gbps=gpu_specs["peak_memory_bandwidth_gbps"],
                 peak_performance=gpu_specs["peak_performance"].copy(),

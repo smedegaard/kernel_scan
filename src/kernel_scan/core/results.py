@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import polars as pl
 
-from kernel_scan.core.accelerator import AcceleratorSpecs
+from kernel_scan.core.accelerator import AcceleratorSpec
 from kernel_scan.core.specs import KernelSpec
 
 log = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ class ProfileResultSet:
     def __init__(
         self,
         results: Optional[List[ProfileResult]] = None,
-        accelerator_specs: AcceleratorSpecs = AcceleratorSpecs(),
+        accelerator_specs: AcceleratorSpec = AcceleratorSpec(),
     ):
         """
         Initialize a new ProfileResultSet.

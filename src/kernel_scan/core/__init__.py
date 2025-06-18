@@ -5,7 +5,7 @@ This package contains the core abstractions and data types used
 throughout the kernel_scan library.
 """
 
-from kernel_scan.core.accelerator import AcceleratorSpecs
+from kernel_scan.core.accelerator import AcceleratorSpec
 from kernel_scan.core.config import (
     ConfigBuilder,
     ProfileConfig,
@@ -82,5 +82,5 @@ __all__ = [
     "ProfileConfig",
     "ConfigBuilder",
     # Accelerator
-    "AcceleratorSpecs",
+    "AcceleratorSpec",
 ]
