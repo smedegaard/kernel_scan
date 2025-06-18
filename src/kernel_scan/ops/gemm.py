@@ -6,11 +6,8 @@ for the kernel_scan library. It provides the necessary functionality to
 define and validate GEMM operations for GPU profiling.
 """
 
-import math
-import random
 from typing import Optional, Tuple
 
-# Import Polars - required for this module
 import polars as pl
 
 from kernel_scan.core.types import (
@@ -152,19 +149,7 @@ def calculate_gemm_flops(params: GemmParams) -> int:
     Returns:
         The number of floating-point operations
     """
-    # Basic FLOPs for matrix multiplication: 2 * m * n * k
-    # (k multiply-adds per element, 2 operations per multiply-add)
-    flops = 2 * params.m * params.n * params.k
-
-    # Add FLOPs for alpha scaling if alpha != 1.0
-    if params.alpha != 1.0:
-        flops += params.m * params.n
-
-    # Add FLOPs for beta scaling if beta != 0.0
-    if params.beta != 0.0:
-        flops += params.m * params.n
-
-    return flops
+    raise NotImplementedError("calculate_gemm_flops is not implemented")
 
 
 def create_random_gemm_inputs(
@@ -181,42 +166,7 @@ def create_random_gemm_inputs(
     Returns:
         Tuple of (A, B, C) matrices as Polars DataFrames
     """
-    # Set seed for reproducibility if provided
-    if seed is not None:
-        random.seed(seed)
-
-    # Get polars dtype
-    pl_dtype = DataType.get_polars_dtype(data_type)
-
-    # Helper function to create random DataFrame
-    def create_random_df(rows, cols, dtype=pl_dtype):
-        return pl.DataFrame(
-            {f"col_{i}": [random.random() for _ in range(rows)] for i in range(cols)}
-        ).cast({f"col_{i}": dtype for i in range(cols)})
-
-    # Create random matrices with Polars
-    if params.layout_a == Layout.ROW_MAJOR:
-        a = create_random_df(params.m, params.k)
-    else:
-        # For column major layout
-        a = create_random_df(params.k, params.m)
-        # Handle column major through metadata instead of transposing
-
-    if params.layout_b == Layout.ROW_MAJOR:
-        b = create_random_df(params.k, params.n)
-    else:
-        # For column major layout
-        b = create_random_df(params.n, params.k)
-        # Handle column major through metadata instead of transposing
-
-    if params.layout_c == Layout.ROW_MAJOR:
-        c = create_random_df(params.m, params.n)
-    else:
-        # For column major layout
-        c = create_random_df(params.n, params.m)
-        # Handle column major through metadata instead of transposing
-
-    return a, b, c
+    raise NotImplementedError("create_random_gemm_inputs")
 
 
 def verify_gemm_result(
@@ -241,84 +191,4 @@ def verify_gemm_result(
     Returns:
         True if the result is correct within the tolerance
     """
-    # Implement matrix multiplication with Polars
-    # This is a custom implementation since Polars doesn't have built-in matrix multiplication
-
-    # Extract dimensions based on layout
-    if params.layout_a == Layout.ROW_MAJOR:
-        a_rows, a_cols = params.m, params.k
-    else:
-        a_rows, a_cols = params.k, params.m
-
-    if params.layout_b == Layout.ROW_MAJOR:
-        b_rows, b_cols = params.k, params.n
-    else:
-        b_rows, b_cols = params.n, params.k
-
-    if params.layout_c == Layout.ROW_MAJOR:
-        c_rows, c_cols = params.m, params.n
-    else:
-        c_rows, c_cols = params.n, params.m
-
-    # Create an empty result matrix
-    expected = pl.DataFrame()
-
-    # Handle matrix multiplication
-    # For each element in the result matrix, calculate the dot product
-    for i in range(params.m):
-        row_values = []
-        for j in range(params.n):
-            # Calculate dot product for this element
-            element_sum = 0.0
-
-            for k in range(params.k):
-                # Get values based on layout
-                if params.layout_a == Layout.ROW_MAJOR:
-                    a_val = a.row(i)[k]
-                else:
-                    a_val = a.row(k)[i]
-
-                if params.layout_b == Layout.ROW_MAJOR:
-                    b_val = b.row(k)[j]
-                else:
-                    b_val = b.row(j)[k]
-
-                element_sum += a_val * b_val
-
-            # Apply alpha and beta
-            if params.layout_c == Layout.ROW_MAJOR:
-                c_val = c.row(i)[j]
-            else:
-                c_val = c.row(j)[i]
-
-            result = params.alpha * element_sum + params.beta * c_val
-            row_values.append(result)
-
-        # Add the row to the expected result
-        if not expected.is_empty():
-            expected = expected.vstack(pl.DataFrame([row_values]))
-        else:
-            expected = pl.DataFrame([row_values])
-
-    # Compare expected with actual result
-    all_close = True
-
-    for i in range(params.m):
-        for j in range(params.n):
-            expected_val = expected.row(i)[j]
-
-            if params.layout_c == Layout.ROW_MAJOR:
-                actual_val = c_result.row(i)[j]
-            else:
-                actual_val = c_result.row(j)[i]
-
-            # Check if values are close within tolerance
-            if not math.isclose(
-                expected_val, actual_val, rel_tol=tolerance, abs_tol=tolerance
-            ):
-                all_close = False
-                break
-        if not all_close:
-            break
-
-    return all_close
+    raise NotImplementedError("GEMM verification not implemented yet")
