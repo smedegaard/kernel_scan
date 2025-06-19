@@ -10,7 +10,7 @@ from typing import Dict, Optional, Union
 
 from kernel_scan.api.operations.gemm import GemmParams
 from kernel_scan.core.config import ProfileConfig
-from kernel_scan.core.engine import ComputeEngine, EngineType, create_engine
+from kernel_scan.core.engine import ComputeEngine, EngineType
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 from kernel_scan.core.types import (
@@ -207,7 +207,24 @@ class Profiler:
 
         # Create the engine if it doesn't exist
         if engine_type not in self._engines:
-            engine = create_engine(engine_type, self._config, self._accelerator_specs)
+            # Import the appropriate engine implementation based on engine_type
+            if engine_type == EngineType.COMPOSABLE_KERNEL:
+                from kernel_scan.api.engines.composable_kernel_engine import (
+                    ComposableKernelEngine,
+                )
+
+                engine = ComposableKernelEngine.create(
+                    engine_type, self._config, self._accelerator_specs
+                )
+            elif engine_type == EngineType.MOCK:
+                from kernel_scan.api.engines.mock_engine import MockEngine
+
+                engine = MockEngine.create(
+                    engine_type, self._config, self._accelerator_specs
+                )
+            else:
+                raise ValueError(f"Unsupported engine type: {engine_type}")
+
             engine.initialize()
             self._engines[engine_type] = engine
 

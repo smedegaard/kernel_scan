@@ -10,7 +10,7 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from kernel_scan.api.operations.gemm import (
     GemmInputs,
@@ -19,7 +19,7 @@ from kernel_scan.api.operations.gemm import (
     GemmParams,
 )
 from kernel_scan.core.config import ProfileConfig
-from kernel_scan.core.engine import ComputeEngine
+from kernel_scan.core.engine import ComputeEngine, EngineType
 from kernel_scan.core.results import ProfileResult, ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec, TensorSpec
 from kernel_scan.core.types import (
@@ -199,6 +199,52 @@ class ComposableKernelEngine(ComputeEngine):
             # Clean up temporary file only if we created it
             if temp_file_created and os.path.exists(output_file):
                 os.unlink(output_file)
+
+    @classmethod
+    def create(
+        cls,
+        engine_type: Union[EngineType, str],
+        config: Optional[ProfileConfig] = None,
+        accelerator_specs: Optional[AcceleratorSpec] = None,
+    ) -> "ComputeEngine":
+        """
+        Factory method for creating ComposableKernelEngine instances.
+
+        Args:
+            engine_type: Type of engine to create
+            config: Optional configuration for the engine
+            accelerator_specs: Optional hardware specifications for the accelerator
+
+        Returns:
+            ComputeEngine instance
+
+        Raises:
+            ValueError: If the engine type is not COMPOSABLE_KERNEL
+        """
+        # Convert string to enum if needed
+        if isinstance(engine_type, str):
+            try:
+                engine_type = next(
+                    e
+                    for e in EngineType
+                    if e.name.lower() == engine_type.lower().replace(" ", "_")
+                )
+            except StopIteration:
+                valid_types = [e.name.lower() for e in EngineType]
+                raise ValueError(
+                    f"Unsupported engine type: {engine_type}. "
+                    f"Valid types are: {', '.join(valid_types)}"
+                )
+
+        # Check if this is the right engine type
+        if engine_type != EngineType.COMPOSABLE_KERNEL:
+            raise ValueError(
+                f"ComposableKernelEngine can only create instances of type "
+                f"COMPOSABLE_KERNEL, got {engine_type}"
+            )
+
+        # Create and return instance
+        return cls(config, accelerator_specs)
 
     def get_available_kernels(self) -> List[Dict[str, Any]]:
         """

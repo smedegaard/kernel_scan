@@ -2,8 +2,7 @@
 Base engine interface for kernel profiling.
 
 This module defines the ComputeEngine abstract base class that all compute
-engine implementations must inherit from. It also provides a factory function
-for creating engine instances.
+engine implementations must inherit from.
 """
 
 import abc
@@ -45,6 +44,48 @@ class ComputeEngine(abc.ABC):
         self._config = config or ProfileConfig.create_default()
         self._accelerator_specs = accelerator_specs
         self._initialized = False
+
+    @classmethod
+    @abc.abstractmethod
+    def create(
+        cls,
+        engine_type: Union[EngineType, str],
+        config: Optional[ProfileConfig] = None,
+        accelerator_specs: Optional[AcceleratorSpec] = None,
+    ) -> "ComputeEngine":
+        """
+        Factory method for creating engine instances.
+
+        Args:
+            engine_type: Type of engine to create
+            config: Optional configuration for the engine
+            accelerator_specs: Optional hardware specifications for the accelerator
+
+        Returns:
+            ComputeEngine instance
+
+        Raises:
+            ImportError: If the required engine implementation is not available
+            ValueError: If the engine type is not supported
+        """
+        # Convert string to enum if needed
+        if isinstance(engine_type, str):
+            try:
+                engine_type = next(
+                    e
+                    for e in EngineType
+                    if e.name.lower() == engine_type.lower().replace(" ", "_")
+                )
+            except StopIteration:
+                valid_types = [e.name.lower() for e in EngineType]
+                raise ValueError(
+                    f"Unsupported engine type: {engine_type}. "
+                    f"Valid types are: {', '.join(valid_types)}"
+                )
+
+        raise NotImplementedError(
+            f"Engine type {engine_type} is not supported by this engine implementation."
+        )
 
     @property
     def name(self) -> str:
@@ -148,47 +189,3 @@ class ComputeEngine(abc.ABC):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.shutdown()
-
-
-def create_engine(
-    engine_type: Union[EngineType, str],
-    config: Optional[ProfileConfig] = None,
-    accelerator_specs: Optional[AcceleratorSpec] = None,
-) -> ComputeEngine:
-    """
-    Factory function for creating engine instances.
-
-    Args:
-        engine_type: Type of engine to create
-        config: Optional configuration for the engine
-        accelerator_specs: Optional hardware specifications for the accelerator
-
-    Returns:
-        ComputeEngine instance
-
-    Raises:
-        ImportError: If the required engine implementation is not available
-        ValueError: If the engine type is not supported
-    """
-    # Convert string to enum if needed
-    if isinstance(engine_type, str):
-        try:
-            engine_type = next(
-                e
-                for e in EngineType
-                if e.name.lower() == engine_type.lower().replace(" ", "_")
-            )
-        except StopIteration:
-            valid_types = [e.name.lower() for e in EngineType]
-            raise ValueError(
-                f"Unsupported engine type: {engine_type}. "
-                f"Valid types are: {', '.join(valid_types)}"
-            )
-
-    # Create the appropriate engine instance
-    if engine_type == EngineType.COMPOSABLE_KERNEL:
-        from kernel_scan.api.engines.composable_kernel_engine import (
-            ComposableKernelEngine,
-        )
-
-        return ComposableKernelEngine(config, accelerator_specs)
