@@ -258,6 +258,7 @@ class GemmTestCase(NamedTuple):
 class GemmScanConfig:
     """Configuration parameters for GEMM scanning."""
 
+    engine_type: Optional[EngineType] = None
     data_types: List[DataType] = None
     n_values: List[int] = None
     m_values: List[int] = None
@@ -296,6 +297,7 @@ class GemmScan:
             .for_n_values([1024, 2048, 4096])
             .for_m_values([1, 2, 4, 8, 16])
             .with_k_equals_n()
+            .with_engine_type(EngineType.COMPOSABLE_KERNEL)  # Mandatory
             .iterations(10)
             .warmup(5)
             .run())
@@ -311,6 +313,14 @@ class GemmScan:
         self._results = {}
         self._base_output_dir = None
         self._plots_dir = None
+
+    def with_engine_type(self, engine_type: EngineType) -> "GemmScan":
+        """
+        Set the engine type to use for profiling.
+        This builder method is mandatory before calling run().
+        """
+        self.config.engine_type = engine_type
+        return self
 
     def with_data_types(self, data_types: List[DataType]) -> "GemmScan":
         """Set the data types to scan."""
@@ -473,7 +483,7 @@ class GemmScan:
                 kernel_spec = self._create_kernel_spec(test_case)
                 result = self.profiler.profile_with_engine(
                     kernel_spec,
-                    EngineType.COMPOSABLE_KERNEL,
+                    self.config.engine_type,
                     warmup_iterations=self.config.warmup_iterations,
                     output_file=str(output_file),
                 )
@@ -490,17 +500,22 @@ class GemmScan:
 
     def _validate_config(self):
         """Validate that the configuration is complete and consistent."""
+        if self.config.engine_type is None:
+            raise ValueError("Engine type must be specified using with_engine_type()")
+
         if not self.config.data_types:
-            raise ValueError("No data types specified")
+            raise ValueError(f"No data types specified. Got {self.config.data_types}")
 
         if not self.config.m_values:
-            raise ValueError("No M values specified")
+            raise ValueError(f"No M values specified. Got {self.config.m_values}")
 
         if not self.config.n_values:
-            raise ValueError("No N values specified")
+            raise ValueError(f"No N values specified. Got {self.config.n_values}")
 
         if not self.config.nk_linked and not self.config.k_values:
-            raise ValueError("No K values specified and K ≠ N")
+            raise ValueError(
+                f"No K values specified and K ≠ N. Got {self.config.k_values}"
+            )
 
     def _setup_directories(self):
         """Set up the output directories for the scan."""

@@ -26,7 +26,7 @@ sys.path.append(str(src_path))
 
 try:
     # Import kernel_scan modules with the new GemmScan API
-    from kernel_scan import DataType, Layout
+    from kernel_scan import DataType, EngineType, Layout
     from kernel_scan.core.profiler import GemmScan  # Import the new GemmScan class
     from kernel_scan.visualization import generate_gemm_roofline_plots_by_group
 except ImportError as e:
@@ -45,14 +45,15 @@ def main():
     scanner = GemmScan()
     # Configure and run the scan using the fluent API
     results = (
-        scanner.with_data_types(
+        scanner.with_engine_type(EngineType.COMPOSABLE_KERNEL)
+        .with_data_types(
             [
                 DataType.FLOAT16,
                 DataType.BFLOAT16,
             ]
         )
         .for_n_values([2**n for n in range(6, 15)])  # powers of 2 from 2⁶ to 2¹⁴
-        .for_m_values([2**n for n in range(9)])  # powers of 2 from 2⁰ to 2⁸
+        .for_m_values([2**n for n in range(1, 9)])  # powers of 2 from 2⁰ to 2⁸
         .with_k_equals_n()  # Configure the scan to use K = N for all test cases
         .iterations(10)
         .warmup(5)
