@@ -6,13 +6,13 @@ and library backends, focused on simplicity and usability.
 """
 
 import logging
+import sys
 
-import kernel_scan.core.types as types
+# Import API components
+from kernel_scan.api import Profiler, engines, operations, visualization
 
-# Re-export key API classes for direct import from kernel_scan
-from kernel_scan.api import Profiler, visualization
-
-# Import engine types that users will need
+# Import core types and specs
+from kernel_scan.core import types
 from kernel_scan.core.engine import EngineType
 from kernel_scan.core.specs import (
     AcceleratorSpec,
@@ -21,36 +21,32 @@ from kernel_scan.core.specs import (
     TensorSpec,
 )
 
-# Re-export types directly for backward compatibility
-from kernel_scan.core.types import (
-    DataType,
-    Layout,
-    OperationInputs,
-    OperationOutputs,
-    OperationParams,
-    OperationType,
-)
+# Create aliases for commonly used modules to allow for more intuitive imports
+sys.modules["kernel_scan.operations"] = operations
+sys.modules["kernel_scan.types"] = types
+sys.modules["kernel_scan.visualization"] = visualization
 
-# Configure logging
-log = logging.getLogger(__name__)
+# Also make the specific operation modules available directly
+# For example, this makes kernel_scan.api.operations.gemm available as kernel_scan.operations.gemm
+if hasattr(operations, "gemm"):
+    sys.modules["kernel_scan.operations.gemm"] = operations.gemm
 
 # Make key components available at the package level
 __all__ = [
-    "types",
-    "visualization",
-    # Main API classes
+    # API modules
     "Profiler",
-    "KernelSpecBuilder",
-    # Specs
+    "operations",
+    "engines",
+    "visualization",
+    # Core modules
+    "types",
+    # Core specs
     "TensorSpec",
     "AcceleratorSpec",
     "KernelSpec",
+    "KernelSpecBuilder",
     "EngineType",
-    # Re-exported types
-    "DataType",
-    "Layout",
-    "OperationType",
-    "OperationInputs",
-    "OperationOutputs",
-    "OperationParams",
 ]
+
+# Configure logging
+log = logging.getLogger(__name__)
