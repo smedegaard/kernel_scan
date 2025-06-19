@@ -58,9 +58,9 @@ def main():
         .iterations(10)
         .warmup(5)
         .with_layouts(
-            Layout.ROW_MAJOR,  # Layout for matrix A
-            Layout.ROW_MAJOR,  # Layout for matrix B
-            Layout.ROW_MAJOR,  # Layout for matrix C
+            layout_a=Layout.ROW_MAJOR,
+            layout_b=Layout.ROW_MAJOR,
+            layout_c=Layout.ROW_MAJOR,
         )
         .with_scaling(alpha=1.0, beta=0.0)  # Set scaling factors
         .output_to(Path("results"))
