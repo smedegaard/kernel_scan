@@ -8,13 +8,12 @@ for profiling GPU kernels with different engine backends.
 import logging
 from typing import Dict, Optional, Union
 
-from kernel_scan.core.accelerator import AcceleratorSpec
+from kernel_scan.api.operations.gemm import GemmParams
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import ComputeEngine, EngineType, create_engine
 from kernel_scan.core.results import ProfileResultSet
-from kernel_scan.core.specs import KernelSpec
+from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 from kernel_scan.core.types import (
-    GemmParams,
     Layout,
     OperationType,
 )
@@ -130,9 +129,7 @@ class Profiler:
         Raises:
             ValueError: If the engine type is not supported or the kernel specification is not supported
         """
-        from kernel_scan.core.types import (
-            TensorSpec,
-        )
+        from kernel_scan.core.specs import TensorSpec
 
         # Extract additional parameters
         alpha = kwargs.get("alpha", 1.0)

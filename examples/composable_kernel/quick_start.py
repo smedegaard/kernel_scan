@@ -31,8 +31,8 @@ try:
         OperationType,
         Profiler,
     )
-    from kernel_scan.core.types import TensorSpec
-    from kernel_scan.ops import GemmParams
+    from kernel_scan.api.operations.gemm import GemmParams
+    from kernel_scan.core.specs import TensorSpec
     from kernel_scan.visualization import generate_gemm_roofline_plots_by_group
 except ImportError as e:
     log.error(f"Error importing kernel_scan: {e}")

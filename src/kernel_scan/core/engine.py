@@ -10,10 +10,9 @@ import abc
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union
 
-from kernel_scan.core import AcceleratorSpec
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.results import ProfileResultSet
-from kernel_scan.core.specs import KernelSpec
+from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 
 
 class EngineType(Enum):
@@ -188,6 +187,8 @@ def create_engine(
 
     # Create the appropriate engine instance
     if engine_type == EngineType.COMPOSABLE_KERNEL:
-        from kernel_scan.engines.composable_kernel_engine import ComposableKernelEngine
+        from kernel_scan.api.engines.composable_kernel_engine import (
+            ComposableKernelEngine,
+        )
 
         return ComposableKernelEngine(config, accelerator_specs)

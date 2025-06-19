@@ -38,8 +38,16 @@ uv add kernel-scan[composable_kernel]     # AMD COMPOSABLE_KERNEL
 ## Quick Start
 
 ```python
-from kernel_scan import KernelSpec, Profiler, EngineType, OperationType, DataType, Layout
-from kernel_scan.ops import GemmParams, TensorSpec
+from kernel_scan import (
+    KernelSpec,
+    Profiler,
+    EngineType,
+    OperationType,
+    DataType,
+    Layout,
+    GemmParams,
+    TensorSpec
+)
 
 # Create a GEMM kernel specification
 kernel_spec = (

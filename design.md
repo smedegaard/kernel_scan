@@ -8,38 +8,53 @@ This document outlines the key design decisions for Kernel Scan, a Python librar
 - **Modern package structure**: Using the src-layout pattern for better packaging
 - **Minimal dependencies**: Relying primarily on Polars and AMD's Composable Kernel
 
+### Guidelines for the overall implementation:
+
+1. **Dependency Direction**:
+   - `core` modules should not import from `api`, `operations`, or `engines`
+   - `operations` can import from `core` but not from `api` or `engines`
+   - `engines` can import from `core` but not from `api` or `operations`
+   - `api` can import from all other packages
+
+2. **Type Definitions**:
+   - General types (DataType, Layout, OperationType) should be in `core/types.py`
+   - Operation-specific types (GemmParams) should be in `operations/gemm.py`
+   - Engine-specific types should be in their respective engine modules
+
+3. **User-Facing Classes**:
+   - High-level API classes like `GemmScan` should be in the `api` package
+   - These can import from and coordinate between all other packages
+
+4. **Module Independence**:
+   - Each module should be as independent as possible
+   - Use dependency injection rather than direct imports where possible
+
 ```
-kernel_scan/                  # Project root
-├── pyproject.toml           # Project metadata and dependencies
-├── README.md                # Project documentation
-├── src/                     # Source code directory
-│   └── kernel_scan/         # Main package
-│       ├── __init__.py      # Package entry point
-│       ├── core/            # Core abstractions
-│       │   ├── __init__.py
-│       │   ├── engine.py    # Base engine class & factory
-│       │   ├── specs.py     # Kernel specifications
-│       │   ├── results.py   # Profiling results
-│       │   └── config.py    # Configuration system
-│       ├── engines/         # Concrete engine implementations
-│       │   ├── __init__.py
-│       │   ├── composable_kernel_engine.py  # AMD CK implementation
-│       │   └── mock_engine.py     # For testing
-│       ├── ops/             # Operation types and parameters
-│       │   ├── __init__.py
-│       │   └── gemm.py      # GEMM operations only
-│       ├── utils/           # Utility functions
-│       │   ├── __init__.py
-│       │   ├── validation.py # Input validation
-│       │   └── hardware.py  # AMD hardware detection
-│       └── visualization/   # Results visualization
-│           ├── __init__.py
-│           └── plots.py     # Matplotlib-based plotting
-└── tests/                   # Test directory
-    ├── __init__.py
-    ├── test_core/
-    ├── test_engines/
-    └── test_ops/
+.
+├── design.md
+├── examples
+├── pyproject.toml
+├── README.md
+├── src
+│   └── kernel_scan
+│       ├── api                 # user-facing api
+│       │   ├── gemm_scan.py    # class specifically for GEMM scan operations
+│       │   └── profiler.py     # general class for profiling
+│       ├── core                # core implementation
+│       │   ├── config.py       # helper classes for defining configurations
+│       │   ├── engine.py       # abstract base class for engines
+│       │   ├── errors.py       # custom error definitions
+│       │   ├── results.py      # classes for storing and handling profiling results
+│       │   ├── specs.py        # classes for kernel, tensor and
+│       │   └── types.py        # general type
+│       ├── engines             # specific implementations of engines
+│       │   ├── composable_kernel_engine.py
+│       ├── operations          # utility classes for working with operations like GEMM and convolutions
+│       │   ├── gemm.py
+│       │   └── convolutions.py
+│       └── visualization       # visualization utilities for creating plots and visualizations
+│           ├── plots.py
+└── uv.lock
 ```
 
 ## 2. Key Abstractions
@@ -60,7 +75,7 @@ kernel_scan/                  # Project root
 - **Polars for data manipulation**: Using Polars DataFrames instead of NumPy for results processing
 - **Performance focus**: Leveraging Polars' speed for analyzing large result sets
 - **In-memory results**: Storing profiling results in memory as Polars DataFrames
-- **Export capabilities**: Easy export to CSV, Parquet, or other formats via Polars
+- **Export capabilities**: Easy export to jsonl, duckdb,or other formats via Polars
 
 ## 5. Type Safety Approach
 
@@ -92,7 +107,6 @@ kernel_scan/                  # Project root
 
 - **Default configurations**: Sensible defaults for most use cases
 - **Builder pattern**: For complex configurations
-- **Simple config files**: Support for basic YAML configuration
 
 ## 10. Design Patterns
 
@@ -109,16 +123,9 @@ kernel_scan/                  # Project root
 
 ## 12. What We're Not Doing
 
-- **No persistent storage layer**: In-memory analysis with Polars only
 - **No other ML frameworks**: No PyTorch, TensorFlow, or JAX integration initially
 - **No operations beyond GEMM**: Starting with matrix multiplication only
-- **No custom profiling tools**: Using Composable Kernel's built-in profiler
-
-## 13. Performance Considerations
-
-- **Fast data processing**: Using Polars for efficient data manipulation
-- **Direct integration**: Leveraging Composable Kernel's native profiling capabilities
-- **In-memory analysis**: Keeping results in memory for faster processing
+- **No custom profiling tools**: Using Composable Kernel's, or other pre-existing profilers
 
 ## 14. ComposableKernelEngine Integration
 

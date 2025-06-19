@@ -12,20 +12,20 @@ import subprocess
 import tempfile
 from typing import Any, Dict, List, Optional
 
-from kernel_scan.core.accelerator import AcceleratorSpec
-from kernel_scan.core.config import ProfileConfig
-from kernel_scan.core.engine import ComputeEngine
-from kernel_scan.core.results import ProfileResult, ProfileResultSet
-from kernel_scan.core.specs import KernelSpec
-from kernel_scan.core.types import (
-    DataType,
+from kernel_scan.api.operations.gemm import (
     GemmInputs,
     GemmOperationParams,
     GemmOutputs,
     GemmParams,
+)
+from kernel_scan.core.config import ProfileConfig
+from kernel_scan.core.engine import ComputeEngine
+from kernel_scan.core.results import ProfileResult, ProfileResultSet
+from kernel_scan.core.specs import AcceleratorSpec, KernelSpec, TensorSpec
+from kernel_scan.core.types import (
+    DataType,
     Layout,
     OperationType,
-    TensorSpec,
 )
 
 log = logging.getLogger(__name__)

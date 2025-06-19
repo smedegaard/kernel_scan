@@ -7,29 +7,50 @@ and library backends, focused on simplicity and usability.
 
 import logging
 
-# Import core components
-from kernel_scan.core.engine import EngineType
-from kernel_scan.core.profiler import Profiler
-from kernel_scan.core.specs import KernelSpec
-from kernel_scan.core.types import DataType, Layout, OperationType, TensorSpec
+import kernel_scan.core.types as types
 
-# Import operation-specific components
-from kernel_scan.ops import GemmParams
+# Re-export key API classes for direct import from kernel_scan
+from kernel_scan.api import Profiler, visualization
+
+# Import engine types that users will need
+from kernel_scan.core.engine import EngineType
+from kernel_scan.core.specs import (
+    AcceleratorSpec,
+    KernelSpec,
+    KernelSpecBuilder,
+    TensorSpec,
+)
+
+# Re-export types directly for backward compatibility
+from kernel_scan.core.types import (
+    DataType,
+    Layout,
+    OperationInputs,
+    OperationOutputs,
+    OperationParams,
+    OperationType,
+)
 
 # Configure logging
 log = logging.getLogger(__name__)
 
 # Make key components available at the package level
 __all__ = [
-    # Core classes
+    "types",
+    "visualization",
+    # Main API classes
     "Profiler",
+    "KernelSpecBuilder",
+    # Specs
+    "TensorSpec",
+    "AcceleratorSpec",
     "KernelSpec",
     "EngineType",
-    # Core types
-    "OperationType",
+    # Re-exported types
     "DataType",
     "Layout",
-    "TensorSpec",
-    # Operation-specific
-    "GemmParams",
+    "OperationType",
+    "OperationInputs",
+    "OperationOutputs",
+    "OperationParams",
 ]

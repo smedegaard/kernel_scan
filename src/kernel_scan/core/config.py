@@ -1,12 +1,8 @@
-"""
-Configuration system for kernel profiling.
-
-This module provides a flexible configuration system for the kernel_scan
-library, allowing users to customize profiling behavior.
-"""
-
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -27,7 +23,6 @@ class ProfileConfig:
         log_level: Logging level ('debug', 'info', 'warning', 'error')
         device_id: GPU device ID to use
         workspace_size: Workspace size in bytes
-        extra_params: Additional configuration parameters
     """
 
     custom_profiler_path: Optional[str] = None
@@ -42,7 +37,6 @@ class ProfileConfig:
     log_level: str = "info"
     device_id: int = 0
     workspace_size: Optional[int] = None
-    extra_params: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def create_default(cls) -> "ProfileConfig":
@@ -67,13 +61,11 @@ class ProfileConfig:
         for key, value in config_dict.items():
             if hasattr(config, key):
                 setattr(config, key, value)
-            else:
-                config.extra_params[key] = value
 
         return config
 
 
-class ConfigBuilder:
+class ProfilerConfigBuilder:
     """
     Builder pattern implementation for creating ProfileConfig objects.
 
@@ -82,72 +74,67 @@ class ConfigBuilder:
     """
 
     def __init__(self):
-        """Initialize a new ConfigBuilder with default values."""
+        """Initialize a new ProfilerConfigBuilder with default values."""
         self._config = ProfileConfig.create_default()
 
-    def custom_profiler_path(self, path: Optional[str]) -> "ConfigBuilder":
+    def custom_profiler_path(self, path: Optional[str]) -> "ProfilerConfigBuilder":
         """Set the custom profiler path."""
         self._config.custom_profiler_path = path
         return self
 
-    def iterations(self, count: int) -> "ConfigBuilder":
+    def iterations(self, count: int) -> "ProfilerConfigBuilder":
         """Set the number of profiling iterations."""
         self._config.iterations = count
         return self
 
-    def warmup_iterations(self, count: int) -> "ConfigBuilder":
+    def warmup_iterations(self, count: int) -> "ProfilerConfigBuilder":
         """Set the number of warmup iterations."""
         self._config.warmup_iterations = count
         return self
 
-    def verify_results(self, verify: bool) -> "ConfigBuilder":
+    def verify_results(self, verify: bool) -> "ProfilerConfigBuilder":
         """Set whether to verify results against reference implementation."""
         self._config.verify_results = verify
         return self
 
-    def verification_tolerance(self, tolerance: float) -> "ConfigBuilder":
+    def verification_tolerance(self, tolerance: float) -> "ProfilerConfigBuilder":
         """Set the tolerance for result verification."""
         self._config.verification_tolerance = tolerance
         return self
 
-    def engine_config(self, **kwargs) -> "ConfigBuilder":
+    def engine_config(self, **kwargs) -> "ProfilerConfigBuilder":
         """Set engine-specific configuration."""
         self._config.engine_config.update(kwargs)
         return self
 
-    def output_dir(self, directory: str) -> "ConfigBuilder":
+    def output_dir(self, directory: str) -> "ProfilerConfigBuilder":
         """Set the directory for profiling outputs."""
         self._config.output_dir = directory
         return self
 
-    def save_results(self, save: bool) -> "ConfigBuilder":
+    def save_results(self, save: bool) -> "ProfilerConfigBuilder":
         """Set whether to save results to disk."""
         self._config.save_results = save
         return self
 
-    def result_format(self, format_str: str) -> "ConfigBuilder":
+    def result_format(self, format_str: str) -> "ProfilerConfigBuilder":
         """Set the format for saving results."""
         self._config.result_format = format_str
         return self
 
-    def log_level(self, level: str) -> "ConfigBuilder":
+    def log_level(self, level: str) -> "ProfilerConfigBuilder":
         """Set the logging level."""
         self._config.log_level = level
         return self
 
-    def device_id(self, device: int) -> "ConfigBuilder":
+    def device_id(self, device: int) -> "ProfilerConfigBuilder":
         """Set the GPU device ID to use."""
         self._config.device_id = device
         return self
 
-    def workspace_size(self, size: int) -> "ConfigBuilder":
+    def workspace_size(self, size: int) -> "ProfilerConfigBuilder":
         """Set the workspace size in bytes."""
         self._config.workspace_size = size
-        return self
-
-    def extra_params(self, **kwargs) -> "ConfigBuilder":
-        """Set additional configuration parameters."""
-        self._config.extra_params.update(kwargs)
         return self
 
     def build(self) -> ProfileConfig:

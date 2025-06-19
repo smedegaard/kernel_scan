@@ -11,8 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import polars as pl
 
-from kernel_scan.core.accelerator import AcceleratorSpec
-from kernel_scan.core.specs import KernelSpec
+from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 
 log = logging.getLogger(__name__)
 
