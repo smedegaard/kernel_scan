@@ -6,19 +6,12 @@ engine implementations must inherit from.
 """
 
 import abc
-from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union
 
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
-
-
-class EngineType(Enum):
-    """Enum representing available compute engine types."""
-
-    COMPOSABLE_KERNEL = auto()  # AMD's Composable Kernel
-    MOCK = auto()  # Mock engine for testing
+from kernel_scan.core.types import EngineType
 
 
 class ComputeEngine(abc.ABC):

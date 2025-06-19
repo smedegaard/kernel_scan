@@ -13,7 +13,6 @@ from kernel_scan.api import Profiler, engines, operations, visualization
 
 # Import core types and specs
 from kernel_scan.core import types
-from kernel_scan.core.engine import EngineType
 from kernel_scan.core.specs import (
     AcceleratorSpec,
     KernelSpec,

@@ -19,11 +19,12 @@ from kernel_scan.api.operations.gemm import (
     GemmParams,
 )
 from kernel_scan.core.config import ProfileConfig
-from kernel_scan.core.engine import ComputeEngine, EngineType
+from kernel_scan.core.engine import ComputeEngine
 from kernel_scan.core.results import ProfileResult, ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec, TensorSpec
 from kernel_scan.core.types import (
     DataType,
+    EngineType,
     Layout,
     OperationType,
 )

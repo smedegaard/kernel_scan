@@ -15,6 +15,13 @@ from enum import Enum, auto
 ###################################################################################
 
 
+class EngineType(Enum):
+    """Enum representing available compute engine types."""
+
+    COMPOSABLE_KERNEL = auto()  # AMD's Composable Kernel
+    MOCK = auto()  # Mock engine for testing
+
+
 class OperationType(Enum):
     """Represents the type of compute operation to be profiled."""
 

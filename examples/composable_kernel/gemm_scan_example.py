@@ -26,9 +26,8 @@ sys.path.append(str(src_path))
 
 try:
     # Import kernel_scan modules with the new GemmScan API
-    from kernel_scan import EngineType
     from kernel_scan.operations.gemm import GemmScan
-    from kernel_scan.types import DataType, Layout
+    from kernel_scan.types import DataType, EngineType, Layout
     from kernel_scan.visualization import generate_gemm_roofline_plots_by_group
 except ImportError as e:
     log.error(f"Error importing kernel_scan: {e}")
