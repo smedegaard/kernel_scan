@@ -14,7 +14,7 @@ from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 log = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ sys.path.append(str(src_path))
 try:
     # Import kernel_scan modules with the new GemmScan API
     from kernel_scan.operations.gemm import GemmScan
-    from kernel_scan.types import DataType, EngineType, Layout
+    from kernel_scan.types import DataType, EngineType
     from kernel_scan.visualization import generate_gemm_roofline_plots_by_group
 except ImportError as e:
     log.error(f"Error importing kernel_scan: {e}")
@@ -42,29 +42,18 @@ def main():
     log.info("Starting GEMM performance scan...")
 
     # Initialize the GemmScan object with default parameters
-    scanner = GemmScan()
+    scan = GemmScan()
     # Configure and run the scan using the fluent API
     results = (
-        scanner.with_engine_type(EngineType.COMPOSABLE_KERNEL)
-        .with_data_types(
-            [
-                DataType.FLOAT16,
-                DataType.BFLOAT16,
-            ]
-        )
-        .for_n_values([2**n for n in range(6, 15)])  # powers of 2 from 2⁶ to 2¹⁴
-        .for_m_values([2**n for n in range(1, 9)])  # powers of 2 from 2⁰ to 2⁸
-        .with_k_equals_n()  # Configure the scan to use K = N for all test cases
+        scan.with_data_types([DataType.FLOAT16])
+        .for_m_values([1, 2, 4])  # M grows through these values
+        .growing_with_respect_to("M")  # M is the growing dimension
+        .with_n_equals(lambda m: m * 256)  # N = M * 256
+        .with_k_equals(lambda m: m * 256)  # K = M * 256
+        .with_engine_type(EngineType.COMPOSABLE_KERNEL)
         .iterations(10)
         .warmup(5)
-        .with_layouts(
-            layout_a=Layout.ROW_MAJOR,
-            layout_b=Layout.ROW_MAJOR,
-            layout_c=Layout.ROW_MAJOR,
-        )
-        .with_scaling(alpha=1.0, beta=0.0)  # Set scaling factors
-        .output_to(Path("results"))
-        .run()  # Execute the scan
+        .run()
     )
 
     # Generate and save plots
@@ -78,7 +67,7 @@ def main():
             for result_set in data_type_results:
                 figures = generate_gemm_roofline_plots_by_group(result_set)
                 for group, fig in figures.items():
-                    plot_file = scanner._plots_dir / f"{data_type}_{group}.png"
+                    plot_file = scan._plots_dir / f"{data_type}_{group}.png"
                     fig.write_image(plot_file)
                     log.info(f" 🖼️ Plot saved to: {plot_file}")
         except Exception as e:
@@ -86,7 +75,7 @@ def main():
             raise e
 
     log.info(
-        f"\nScan completed!\n Results saved to: {scanner._base_output_dir}. Plots can be found in {scanner._plots_dir}."
+        f"\nScan completed!\n Results saved to: {scan._base_output_dir}. Plots can be found in {scan._plots_dir}."
     )
 
 
