@@ -593,51 +593,181 @@ class FlopsPerBit(Unit):
         return self.base_value
 
 
-def compute_arithmetic_intensity(
-    flops: Union[Flop, int, float], bytes_accessed: Union[Byte, int, float]
-) -> FlopsPerByte:
-    """
-    Compute the arithmetic intensity (FLOPS/Byte).
-
-    Args:
-        flops: The number of floating-point operations
-        bytes_accessed: The number of bytes accessed
-
-    Returns:
-        The arithmetic intensity as FLOPS/Byte
-    """
-    # Convert the inputs to the appropriate unit types if they're scalars
-    if isinstance(flops, (int, float)):
-        flops = Flop(flops)
-    if isinstance(bytes_accessed, (int, float)):
-        bytes_accessed = Byte(bytes_accessed)
-
-    # Calculate the arithmetic intensity
-    ai = flops.base_value / bytes_accessed.base_value
-    return FlopsPerByte(ai)
+# INTEGER OPERATIONS CLASSES (IOPS)
 
 
-def peak_performance(
-    peak_compute: Flops,
-    peak_bandwidth: BytesPerSecond,
-    arithmetic_intensity: FlopsPerByte,
-) -> Flops:
-    """
-    Calculate the peak attainable performance based on the roofline model.
+class Iop(Unit):
+    """Represents integer operations."""
 
-    Args:
-        peak_compute: The peak compute performance of the device
-        peak_bandwidth: The peak memory bandwidth of the device
-        arithmetic_intensity: The arithmetic intensity of the kernel
+    dimension = Dimension("compute")
+    base_name = "iop"
+    base_symbol = "IOP"
 
-    Returns:
-        The peak attainable performance
-    """
-    # Calculate the memory-bound performance
-    memory_bound_perf = peak_bandwidth.base_value * arithmetic_intensity.base_value
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert IOPs to the target unit's base value."""
+        return self.base_value
 
-    # The peak attainable is the minimum of compute-bound and memory-bound
-    peak_attainable = min(peak_compute.base_value, memory_bound_perf)
 
-    # Return with the same prefix as the input peak_compute
-    return Flops(peak_attainable / peak_compute.prefix.factor, peak_compute.prefix)
+class Iops(Unit):
+    """Represents integer operations per second."""
+
+    dimension = Dimension("compute_rate")
+    base_name = "iops"
+    base_symbol = "IOPS"
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert IOPS to the target unit's base value."""
+        return self.base_value
+
+
+class MegaIops(Iops):
+    """Represents megaIOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.MEGA)
+
+
+class GigaIops(Iops):
+    """Represents gigaIOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.GIGA)
+
+
+class TeraIops(Iops):
+    """Represents teraIOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.TERA)
+
+
+class PetaIops(Iops):
+    """Represents petaIOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.PETA)
+
+
+# ARITHMETIC INTENSITY CLASSES FOR INTEGER OPERATIONS
+
+
+class IopsPerByte(Unit):
+    """Represents IOPS per byte (arithmetic intensity for integer operations)."""
+
+    dimension = Dimension("arithmetic_intensity")
+    base_name = "iops per byte"
+    base_symbol = "IOPS/B"
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert IOPS per byte to the target unit's base value."""
+        if target_unit_class == IopsPerBit:
+            return self.base_value / 8
+        return self.base_value
+
+
+class IopsPerBit(Unit):
+    """Represents IOPS per bit (arithmetic intensity for integer operations)."""
+
+    dimension = Dimension("arithmetic_intensity")
+    base_name = "iops per bit"
+    base_symbol = "IOPS/bit"
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert IOPS per bit to the target unit's base value."""
+        if target_unit_class == IopsPerByte:
+            return self.base_value * 8
+        return self.base_value
+
+
+# GENERIC OPERATIONS CLASSES (for mixed workloads)
+
+
+class Op(Unit):
+    """Represents generic operations (floating-point, integer, or mixed)."""
+
+    dimension = Dimension("compute")
+    base_name = "op"
+    base_symbol = "OP"
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert operations to the target unit's base value."""
+        return self.base_value
+
+
+class Ops(Unit):
+    """Represents generic operations per second."""
+
+    dimension = Dimension("compute_rate")
+    base_name = "ops"
+    base_symbol = "OPS"
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert OPS to the target unit's base value."""
+        return self.base_value
+
+
+class MegaOps(Ops):
+    """Represents megaOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.MEGA)
+
+
+class GigaOps(Ops):
+    """Represents gigaOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.GIGA)
+
+
+class TeraOps(Ops):
+    """Represents teraOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.TERA)
+
+
+class PetaOps(Ops):
+    """Represents petaOPS (convenience class)."""
+
+    def __init__(self, value: float):
+        super().__init__(value, Prefix.PETA)
+
+
+# ARITHMETIC INTENSITY CLASSES FOR GENERIC OPERATIONS
+
+
+class OpsPerByte(Unit):
+    """Represents operations per byte (generic arithmetic intensity)."""
+
+    dimension = Dimension("arithmetic_intensity")
+    base_name = "operations per byte"
+    base_symbol = "OPS/B"
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert operations per byte to the target unit's base value."""
+        if target_unit_class == OpsPerBit:
+            return self.base_value / 8
+        elif target_unit_class == FlopsPerByte:
+            return self.base_value  # Assuming 1:1 conversion for compatibility
+        elif target_unit_class == IopsPerByte:
+            return self.base_value  # Assuming 1:1 conversion
+        return self.base_value
+
+
+class OpsPerBit(Unit):
+    """Represents operations per bit (generic arithmetic intensity)."""
+
+    dimension = Dimension("arithmetic_intensity")
+    base_name = "operations per bit"
+    base_symbol = "OPS/bit"
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert operations per bit to the target unit's base value."""
+        if target_unit_class == OpsPerByte:
+            return self.base_value * 8
+        elif target_unit_class == FlopsPerBit:
+            return self.base_value  # Assuming 1:1 conversion for compatibility
+        elif target_unit_class == IopsPerBit:
+            return self.base_value  # Assuming 1:1 conversion
+        return self.base_value

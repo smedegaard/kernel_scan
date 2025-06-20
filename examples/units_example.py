@@ -24,18 +24,13 @@ try:
         # Base units
         Flops,
         # Derived units
-        FlopsPerByte,
         GigaByte,
         GigaBytesPerSecond,
         GigaFlops,
-        MegaFlops,
         Millisecond,
         # Enum for prefix constants
         Prefix,
-        TeraBytePerSecond,
         TeraFlops,
-        # Helper functions
-        peak_performance,
     )
 except ImportError as e:
     # log.error(f"Error importing kernel_scan: {e}")
@@ -44,6 +39,9 @@ except ImportError as e:
     # )
     raise e
 
+# Configure logging with desired level
+configure_logging(level="info")
+log = get_logger(__name__)
 
 # Configure logging - MUST be imported after adding src to sys.path
 
@@ -54,21 +52,19 @@ log = get_logger(__name__)
 
 def main():
     """Demonstrate the units module with a GPU performance analysis example."""
-    print("Kernel Scan Units Module Example")
-    print("================================\n")
+    log.info("Kernel Scan Units Module Example")
+    log.info("================================\n")
 
     # 1. Creating units with different prefixes
-    print("1. Creating units with different prefixes")
-    print("----------------------------------------")
+    log.info("1. Creating units with different prefixes")
+    log.info("----------------------------------------")
 
     # Create compute performance units
     tflops = TeraFlops(15.7)
     gflops = GigaFlops(980.0)
-    mflops = MegaFlops(250.0)
 
     # Create bandwidth units
     gbps = GigaBytesPerSecond(900.0)
-    tbps = TeraBytePerSecond(1.2)
 
     # Create memory size units
     memory = GigaByte(16.0)
@@ -77,105 +73,66 @@ def main():
     time = Millisecond(3.5)
 
     # Display the units
-    print(f"Compute Performance: {tflops}")
-    print(f"Another Performance: {gflops}")
-    print(f"Memory Bandwidth:    {gbps}")
-    print(f"Memory Size:         {memory}")
-    print(f"Execution Time:      {time}")
-    print()
+    log.info(f"Compute Performance: {tflops}")
+    log.info(f"Another Performance: {gflops}")
+    log.info(f"Memory Bandwidth:    {gbps}")
+    log.info(f"Memory Size:         {memory}")
+    log.info(f"Execution Time:      {time}")
 
     # 2. Converting between prefixes
-    print("2. Converting between prefixes")
-    print("----------------------------")
+    log.info("2. Converting between prefixes")
+    log.info("----------------------------")
 
     # Convert TeraFLOPS to GigaFLOPS
     tflops_to_gflops = tflops.to_giga()
-    print(f"{tflops} = {tflops_to_gflops}")
+    log.info(f"{tflops} = {tflops_to_gflops}")
 
     # Convert GigaFLOPS to TeraFLOPS
     gflops_to_tflops = gflops.to_tera()
-    print(f"{gflops} = {gflops_to_tflops}")
+    log.info(f"{gflops} = {gflops_to_tflops}")
 
     # Convert using generic with_prefix method
     tflops_to_pflops = tflops.with_prefix(Prefix.PETA)
-    print(f"{tflops} = {tflops_to_pflops}")
+    log.info(f"{tflops} = {tflops_to_pflops}")
 
     # Convert bytes with different prefixes
     memory_in_mb = memory.to_mega()
-    print(f"{memory} = {memory_in_mb}")
-    print()
+    log.info(f"{memory} = {memory_in_mb}")
 
     # 3. Arithmetic operations
-    print("3. Arithmetic operations")
-    print("-----------------------")
+    log.info("3. Arithmetic operations")
+    log.info("-----------------------")
 
     # Addition
     total_flops = tflops + gflops_to_tflops
-    print(f"Addition: {tflops} + {gflops_to_tflops} = {total_flops}")
+    log.info(f"Addition: {tflops} + {gflops_to_tflops} = {total_flops}")
 
     # Subtraction
     diff_flops = tflops - gflops_to_tflops
-    print(f"Subtraction: {tflops} - {gflops_to_tflops} = {diff_flops}")
+    log.info(f"Subtraction: {tflops} - {gflops_to_tflops} = {diff_flops}")
 
     # Scalar multiplication
     double_perf = tflops * 2
-    print(f"Scalar multiplication: {tflops} * 2 = {double_perf}")
+    log.info(f"Scalar multiplication: {tflops} * 2 = {double_perf}")
 
     # Scalar division
     half_perf = tflops / 2
-    print(f"Scalar division: {tflops} / 2 = {half_perf}")
-    print()
+    log.info(f"Scalar division: {tflops} / 2 = {half_perf}")
 
     # 4. Roofline model analysis
-    print("4. Roofline model analysis")
-    print("-------------------------")
+    log.info("4. Roofline model analysis")
+    log.info("-------------------------")
 
     # Define hardware characteristics
-    print("Hardware specifications:")
-    print(f"  Peak compute:   {tflops}")
-    print(f"  Peak bandwidth: {gbps}")
-    print()
+    log.info("Hardware specifications:")
+    log.info(f"  Peak compute:   {tflops}")
+    log.info(f"  Peak bandwidth: {gbps}")
 
     # Define kernels with different arithmetic intensities
-    print("Analyzing kernels with different arithmetic intensities:")
-
-    # Create arithmetic intensity objects
-    ai_values = [
-        FlopsPerByte(0.1),  # Memory-bound
-        FlopsPerByte(1.0),  # Balanced
-        FlopsPerByte(100.0),  # Compute-bound
-    ]
-
-    # Calculate attainable performance for each kernel
-    for i, ai in enumerate(ai_values):
-        # Calculate attainable performance based on roofline model
-        attainable = peak_performance(tflops, gbps, ai)
-
-        # Determine if memory-bound or compute-bound
-        memory_bound = (ai.base_value * gbps.base_value) < tflops.base_value
-        bound_type = "memory-bound" if memory_bound else "compute-bound"
-
-        # Display analysis
-        print(f"Kernel {i + 1} (AI = {ai.format(4)}):")
-        print(f"  - Status: {bound_type}")
-        print(f"  - Peak attainable: {attainable}")
-
-        # Calculate efficiency for a simulated measured performance
-        # (Let's say we achieve 80% of attainable performance)
-        measured = attainable.base_value * 0.8 / attainable.prefix.factor
-        measured_perf = Flops(measured, attainable.prefix)
-        efficiency = measured_perf.base_value / attainable.base_value
-
-        print(f"  - Measured: {measured_perf}")
-        print(f"  - Efficiency: {efficiency:.2%}")
-        print()
-
-    # 5. Calculate arithmetic intensity for a specific kernel
-    print("5. Calculate arithmetic intensity for a specific kernel")
-    print("----------------------------------------------------")
+    log.info("Analyzing kernels with different arithmetic intensities:")
 
     # Example: Matrix multiplication kernel (M=N=K=1024)
-    print("Matrix multiplication kernel (M=N=K=1024):")
+    log.info("Matrix multiplication kernel (M=N=K=1024):")
 
     # Define computation and memory requirements
     # For MxNxK GEMM, computation is 2*M*N*K FLOPs
@@ -188,23 +145,9 @@ def main():
     kernel_flops = Flops(flops_count)
     kernel_bytes = Byte(memory_bytes)
 
-    # Print in more readable format
-    print(f"  Computation: {kernel_flops.to_giga().format(2)} operations")
-    print(f"  Memory access: {kernel_bytes.to_mega().format(2)}")
-
-    # Calculate arithmetic intensity
-    ai = flops_count / memory_bytes
-    kernel_ai = FlopsPerByte(ai)
-    print(f"  Arithmetic intensity: {kernel_ai.format(4)}")
-
-    # Determine attainable performance
-    attainable = peak_performance(tflops, gbps, kernel_ai)
-    memory_bound = (kernel_ai.base_value * gbps.base_value) < tflops.base_value
-    bound_type = "memory-bound" if memory_bound else "compute-bound"
-
-    print(f"  Bottleneck: {bound_type}")
-    print(f"  Attainable performance: {attainable}")
-    print()
+    # log.info in more readable format
+    log.info(f"  Computation: {kernel_flops.to_giga().format(2)} operations")
+    log.info(f"  Memory access: {kernel_bytes.to_mega().format(2)}")
 
 
 if __name__ == "__main__":

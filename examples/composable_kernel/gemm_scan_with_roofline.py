@@ -17,15 +17,11 @@ project_root = Path(__file__).parent.parent.parent
 src_path = project_root / "src"
 sys.path.append(str(src_path))
 
-# Configure logging - MUST be imported after adding src to sys.path
-from kernel_scan.core.logging import configure_logging, get_logger
-
-# Configure logging with desired level
-configure_logging(level="info")
-log = get_logger(__name__)
 
 try:
     # Import kernel_scan modules with the new GemmScan API
+    # Configure logging - MUST be imported after adding src to sys.path
+    from kernel_scan.core.logging import configure_logging, get_logger
     from kernel_scan.operations.gemm import GemmScan
     from kernel_scan.types import DataType, EngineType
     from kernel_scan.visualization import generate_gemm_roofline_plots_by_data_type
@@ -35,6 +31,10 @@ except ImportError as e:
     #     "Make sure the kernel_scan package is properly installed or in the Python path."
     # )
     raise e
+
+# Configure logging with desired level
+configure_logging(level="info")
+log = get_logger(__name__)
 
 
 def main():

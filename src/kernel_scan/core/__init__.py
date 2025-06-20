@@ -49,7 +49,4 @@ from kernel_scan.core.units import (
     TeraBytePerSecond,
     TeraFlops,
     Unit,
-    # Helper functions
-    compute_arithmetic_intensity,
-    peak_performance,
 )

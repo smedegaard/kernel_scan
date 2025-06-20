@@ -15,7 +15,7 @@ This module provides a more ergonomic alternative to libraries like `pint` for t
 ## Basic Usage
 
 ```python
-from kernel_scan.core.units import TeraFlops, GigaBytesPerSecond, compute_arithmetic_intensity
+from kernel_scan.core.units import TeraFlops, GigaBytesPerSecond
 
 # Create performance metrics
 compute_perf = TeraFlops(1.2)  # 1.2 TFLOPS
@@ -24,10 +24,6 @@ bandwidth = GigaBytesPerSecond(900)  # 900 GB/s
 # Convert between units with different prefixes
 gflops = compute_perf.to_giga()  # 1200 GFLOPs
 print(gflops)  # "1200.0 GFLOPS"
-
-# Calculate arithmetic intensity
-intensity = compute_arithmetic_intensity(compute_perf, bandwidth)
-print(intensity)  # "0.00133 FLOPS/B"
 
 # Apply the roofline model
 from kernel_scan.core.units import peak_performance, FlopsPerByte

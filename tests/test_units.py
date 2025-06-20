@@ -23,7 +23,6 @@ from kernel_scan.core.units import (
     Second,
     TeraFlops,
     compute_arithmetic_intensity,
-    peak_performance,
 )
 
 
@@ -248,37 +247,6 @@ class TestComparison:
             a < b
         with pytest.raises(TypeError):
             a > b
-
-
-class TestHelperFunctions:
-    """Test helper functions in the units module."""
-
-    def test_compute_arithmetic_intensity(self):
-        """Test arithmetic intensity calculation."""
-        compute = TeraFlops(2.0)
-        bandwidth = GigaBytesPerSecond(0.5)
-        intensity = compute_arithmetic_intensity(compute, bandwidth)
-
-        assert isinstance(intensity, FlopsPerByte)
-        assert intensity.value == 4.0  # 2 TFLOPS / 0.5 GB/s = 4 FLOPS/B
-
-    def test_peak_performance(self):
-        """Test peak performance calculation."""
-        # Compute-bound case
-        compute = TeraFlops(2.0)
-        bandwidth = GigaBytesPerSecond(1.0)
-        intensity = FlopsPerByte(1.0)
-
-        perf = peak_performance(compute, bandwidth, intensity)
-        assert perf.value == 1.0  # min(2.0, 1.0*1.0) = 1.0 TFLOPS
-
-        # Memory-bound case
-        compute = TeraFlops(2.0)
-        bandwidth = GigaBytesPerSecond(0.5)
-        intensity = FlopsPerByte(2.0)
-
-        perf = peak_performance(compute, bandwidth, intensity)
-        assert perf.value == 1.0  # min(2.0, 0.5*2.0) = 1.0 TFLOPS
 
 
 class TestEdgeCases:
