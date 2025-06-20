@@ -1,8 +1,9 @@
-import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-log = logging.getLogger(__name__)
+from kernel_scan.core.logging import get_logger, update_log_level
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -38,6 +39,11 @@ class ProfileConfig:
     device_id: int = 0
     workspace_size: Optional[int] = None
 
+    def __post_init__(self):
+        """Apply configuration settings after initialization."""
+        # Apply log level from config
+        update_log_level(self.log_level)
+
     @classmethod
     def create_default(cls) -> "ProfileConfig":
         """Create a configuration with default values."""
@@ -61,6 +67,10 @@ class ProfileConfig:
         for key, value in config_dict.items():
             if hasattr(config, key):
                 setattr(config, key, value)
+
+        # Apply log level from the config dictionary
+        if hasattr(config, "log_level"):
+            update_log_level(config.log_level)
 
         return config
 

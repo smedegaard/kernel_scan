@@ -6,20 +6,20 @@ This script demonstrates the kernel_scan library's API as shown in the README's
 Quick Start section.
 """
 
-import logging
 import sys
 from pathlib import Path
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-log = logging.getLogger(__name__)
-
 # Add the src directory to sys.path to import kernel_scan
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 src_path = project_root / "src"
 sys.path.append(str(src_path))
+
+# Configure logging - MUST be imported after adding src to sys.path
+from kernel_scan.core.logging import configure_logging, get_logger
+
+# Configure logging with desired level
+configure_logging(level="debug")
+log = get_logger(__name__)
 
 try:
     # Import kernel_scan modules

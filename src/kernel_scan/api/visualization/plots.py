@@ -4,17 +4,17 @@ Plotting functions for kernel profiling results.
 This module provides functions for visualizing kernel profiling results using Plotly.
 """
 
-import logging
 from typing import Dict, List, Optional
 
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
 
+from kernel_scan.core.logging import get_logger
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.types import DataType
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def combine_result_sets(result_sets: List[ProfileResultSet]) -> ProfileResultSet:

@@ -7,7 +7,6 @@ define and validate GEMM operations for GPU profiling.
 """
 
 import itertools
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +35,7 @@ from kernel_scan.core.errors import (
     MissingOutputError,
     UnsupportedOperationTypeError,
 )
+from kernel_scan.core.logging import get_logger
 from kernel_scan.core.specs import (
     KernelSpec,
     KernelSpecBuilder,
@@ -51,15 +51,7 @@ from kernel_scan.core.types import (
     OperationType,
 )
 
-log = logging.getLogger("kernel_scan.gemm")
-if not log.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    log.addHandler(handler)
-    log.setLevel(logging.INFO)
+log = get_logger("gemm")
 
 
 @dataclass

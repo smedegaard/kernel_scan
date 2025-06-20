@@ -11,17 +11,18 @@ M=1,2,4,...,256 using multiple data types (FP16, BF16, FP32, INT8).
 import sys
 from pathlib import Path
 
-# Configure logging
-# logging.basicConfig(
-#     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-# )
-# log = logging.getLogger(__name__)
-
 # Add the src directory to sys.path to import kernel_scan
 # Note: We need to go up two levels since we're in examples/composable_kernel/
 project_root = Path(__file__).parent.parent.parent
 src_path = project_root / "src"
 sys.path.append(str(src_path))
+
+# Configure logging - MUST be imported after adding src to sys.path
+from kernel_scan.core.logging import configure_logging, get_logger
+
+# Configure logging with desired level
+configure_logging(level="info")
+log = get_logger(__name__)
 
 try:
     # Import kernel_scan modules with the new GemmScan API
@@ -38,7 +39,7 @@ except ImportError as e:
 
 def main():
     """Run the GEMM performance scan using the new GemmScan API."""
-    # log.info("Starting GEMM performance scan...")
+    log.info("Starting GEMM performance scan...")
 
     # Initialize the GemmScan object with default parameters
     scan = GemmScan()
@@ -61,11 +62,11 @@ def main():
     # Generate and save plots
     for data_type, data_type_results in results.items():
         if not data_type_results:
-            # log.warning(f"No results for {data_type}, skipping plots")
+            log.warning(f"No results for {data_type}, skipping plots")
             continue
 
         try:
-            # log.info(f"Generating roofline plots for {data_type}...")
+            log.info(f"Generating roofline plots for {data_type}...")
             data_type_enum = (
                 DataType[data_type] if isinstance(data_type, str) else data_type
             )
@@ -77,14 +78,14 @@ def main():
             for precision_name, fig in figures.items():
                 plot_file = scan._plots_dir / f"{precision_name}.png"
                 fig.write_image(plot_file)
-                # log.info(f" 🖼️ Plot saved to: {plot_file}")
+                log.info(f" 🖼️ Plot saved to: {plot_file}")
         except Exception as e:
-            # log.error(f"Error generating plots for {data_type}: {e}")
+            log.error(f"Error generating plots for {data_type}: {e}")
             raise e
 
-    # log.info(
-    #     f"\nScan completed!\n Results saved to: {scan._base_output_dir}. Plots can be found in {scan._plots_dir}."
-    # )
+    log.info(
+        f"\nScan completed!\n Results saved to: {scan._base_output_dir}. Plots can be found in {scan._plots_dir}."
+    )
 
 
 if __name__ == "__main__":

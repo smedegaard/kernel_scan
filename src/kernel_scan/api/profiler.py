@@ -5,17 +5,17 @@ This module provides the Profiler class, which is the main entry point
 for profiling GPU kernels with different engine backends.
 """
 
-import logging
 from typing import Dict, Optional, Union
 
 from kernel_scan.api.operations.gemm import GemmParams
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import ComputeEngine
+from kernel_scan.core.logging import get_logger
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 from kernel_scan.core.types import EngineType, Layout, OperationType
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class Profiler:

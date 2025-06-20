@@ -5,7 +5,6 @@ A Python library for profiling GPU compute kernels across different hardware
 and library backends, focused on simplicity and usability.
 """
 
-import logging
 import sys
 
 # Import API components
@@ -13,6 +12,9 @@ from kernel_scan.api import Profiler, engines, operations, visualization
 
 # Import core types and specs
 from kernel_scan.core import types
+
+# Import core logging first to configure it before anything else
+from kernel_scan.core.logging import configure_logging, get_logger
 from kernel_scan.core.specs import (
     AcceleratorSpec,
     KernelSpec,
@@ -47,5 +49,6 @@ __all__ = [
     "EngineType",
 ]
 
-# Configure logging
-log = logging.getLogger(__name__)
+# Configure logging once at import time
+configure_logging()
+log = get_logger(__name__)

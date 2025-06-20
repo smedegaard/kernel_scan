@@ -6,7 +6,6 @@ specifying GPU kernel operations to be profiled.
 """
 
 import json
-import logging
 import subprocess
 import warnings
 from abc import ABC, abstractmethod
@@ -19,6 +18,7 @@ from kernel_scan.core.errors import (
     MissingOperationTypeError,
     UnsupportedOperationTypeError,
 )
+from kernel_scan.core.logging import get_logger
 from kernel_scan.core.types import (
     DataType,
     Layout,
@@ -28,7 +28,7 @@ from kernel_scan.core.types import (
     OperationType,
 )
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _OPERATION_BUILDERS: Dict[OperationType, type["KernelSpecBuilder"]] = {}
 

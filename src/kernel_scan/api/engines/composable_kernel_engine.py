@@ -6,7 +6,6 @@ that interacts with AMD's Composable Kernel library via the ckProfiler tool.
 """
 
 import json
-import logging
 import os
 import subprocess
 import tempfile
@@ -20,6 +19,7 @@ from kernel_scan.api.operations.gemm import (
 )
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import ComputeEngine
+from kernel_scan.core.logging import get_logger
 from kernel_scan.core.results import ProfileResult, ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec, TensorSpec
 from kernel_scan.core.types import (
@@ -29,10 +29,7 @@ from kernel_scan.core.types import (
     OperationType,
 )
 
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class ComposableKernelEngine(ComputeEngine):

@@ -8,15 +8,8 @@ while scanning GEMM performance for N=K (powers of 2 from 64 to 16384) with
 M=1,2,4,...,256 using multiple data types (FP16, BF16, FP32, INT8).
 """
 
-import logging
 import sys
 from pathlib import Path
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-log = logging.getLogger(__name__)
 
 # Add the src directory to sys.path to import kernel_scan
 # Note: We need to go up two levels since we're in examples/composable_kernel/
@@ -24,13 +17,21 @@ project_root = Path(__file__).parent.parent.parent
 src_path = project_root / "src"
 sys.path.append(str(src_path))
 
+# Configure logging - MUST be imported after adding src to sys.path
+from kernel_scan.core.logging import configure_logging, get_logger
+
+# Configure logging with desired level
+configure_logging(level="debug")
+log = get_logger(__name__)
+
 try:
     # Import kernel_scan modules with the new GemmScan API
     from kernel_scan.operations.gemm import GemmScan
     from kernel_scan.types import DataType, EngineType, Layout
 except ImportError as e:
-    log.error(f"Error importing kernel_scan: {e}")
-    log.error(
+    # Import error happens before logging is set up, so we can't use log here
+    print(f"Error importing kernel_scan: {e}")
+    print(
         "Make sure the kernel_scan package is properly installed or in the Python path."
     )
     raise e

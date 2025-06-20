@@ -5,15 +5,16 @@ This module provides classes and functions for storing, analyzing, and
 visualizing kernel profiling results.
 """
 
-import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 import polars as pl
 
+from kernel_scan.core.logging import get_logger
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 @dataclass
@@ -94,7 +95,6 @@ class ProfileResult:
         )
 
         # Add timestamp (use current time if not available)
-        from datetime import datetime
 
         result_dict["timestamp"] = datetime.now().isoformat()
 
