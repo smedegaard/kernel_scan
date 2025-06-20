@@ -29,6 +29,9 @@ from kernel_scan.core.types import (
     OperationType,
 )
 
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 log = logging.getLogger(__name__)
 
 
@@ -170,7 +173,8 @@ class ComposableKernelEngine(ComputeEngine):
             try:
                 profile_data = self._parse_profiler_output(output_file)
             except Exception as e:
-                raise RuntimeError(f"Failed to parse profiler output: {e}")
+                log.error(f"Failed to parse profiler output: {e}")
+                # raise RuntimeError(f"Failed to parse profiler output: {e}")
 
             # Create profile result
             profile_results = [
@@ -454,10 +458,12 @@ class ComposableKernelEngine(ComputeEngine):
             output_file: Path to the output file
 
         Returns:
-            Dictionary containing parsed profiling data
+            Dictionary containing parsed profiling data. Returns an empty list in case of missing or empty output file.
         """
         if not os.path.exists(output_file):
-            raise FileNotFoundError(f"Profiler output file not found: {output_file}")
+            log.error(f"Profiler output file not found: {output_file}")
+            return []
+            # raise FileNotFoundError(f"Profiler output file not found: {output_file}")
 
         try:
             # Read the JSONL file
@@ -465,7 +471,9 @@ class ComposableKernelEngine(ComputeEngine):
                 lines = f.readlines()
 
             if not lines:
-                raise ValueError("Profiler output file is empty")
+                log.error(f"Profiler output file is empty: {output_file}")
+                # raise ValueError("Profiler output file is empty")
+                return []
 
             profile_data = [json.loads(line) for line in lines]
 

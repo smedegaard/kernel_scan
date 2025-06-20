@@ -715,6 +715,8 @@ class GemmScan:
 
     def _generate_test_cases(self) -> Iterator[GemmTestCase]:
         """Generate all test cases as an iterator."""
+        test_cases = []
+
         # Handle growing dimension case
         if self.config.growing_dimension:
             dimension = self.config.growing_dimension
@@ -765,10 +767,8 @@ class GemmScan:
                     )
 
                     test_case = GemmTestCase(data_type=data_type, m=m, n=n, k=k)
-                    log.info(
-                        f"Generated test case with {dimension}={value}: M={m}, N={n}, K={k}, DataType={data_type.name}"
-                    )
-                    yield test_case
+                    test_cases.append(test_case)
+
         # Handle existing cases
         elif self.config.nk_linked:
             # For each (data_type, n, m) combination, use k=n
@@ -776,9 +776,7 @@ class GemmScan:
                 self.config.data_types, self.config.n_values, self.config.m_values
             ):
                 test_case = GemmTestCase(data_type=data_type, m=m, n=n, k=n)
-                log.debug(f"Generated test case: {test_case}")
-
-                yield GemmTestCase(data_type=data_type, m=m, n=n, k=n)
+                test_cases.append(test_case)
         else:
             # For each (data_type, n, m, k) combination
             for data_type, n, m, k in itertools.product(
@@ -788,9 +786,80 @@ class GemmScan:
                 self.config.k_values,
             ):
                 test_case = GemmTestCase(data_type=data_type, m=m, n=n, k=k)
-                log.debug(f"Generated test case: {test_case}")
+                test_cases.append(test_case)
 
-                yield test_case
+        # Log the comprehensive test case matrix
+        self._log_test_case_matrix(test_cases)
+
+        # Yield all test cases
+        for test_case in test_cases:
+            yield test_case
+
+    def _log_test_case_matrix(self, test_cases: List[GemmTestCase]) -> None:
+        """Log a comprehensive matrix of all generated test cases."""
+        if not test_cases:
+            log.info("No test cases generated.")
+            return
+
+        # Group test cases by data type
+        test_cases_by_data_type = {}
+        for test_case in test_cases:
+            data_type_name = test_case.data_type.name
+            if data_type_name not in test_cases_by_data_type:
+                test_cases_by_data_type[data_type_name] = []
+            test_cases_by_data_type[data_type_name].append(test_case)
+
+        # Log summary statistics
+        total_cases = len(test_cases)
+        data_types = list(test_cases_by_data_type.keys())
+
+        log.info(f"\n{'=' * 80}")
+        log.info("GEMM TEST CASE MATRIX SUMMARY")
+        log.info(f"{'=' * 80}")
+        log.info(f"Total test cases: {total_cases}")
+        log.info(f"Data types: {', '.join(data_types)}")
+        log.info(
+            f"Cases per data type: {total_cases // len(data_types) if data_types else 0}"
+        )
+
+        # Log detailed matrix for each data type
+        for data_type_name, cases in test_cases_by_data_type.items():
+            log.info(f"\n{'-' * 60}")
+            log.info(f"TEST CASES FOR {data_type_name}")
+            log.info(f"{'-' * 60}")
+
+            # Create a table header
+            log.info(
+                f"{'Index':<6} {'M':<8} {'N':<8} {'K':<8} {'FLOPS':<12} {'Matrix Size'}"
+            )
+            log.info(f"{'-' * 60}")
+
+            # Log each test case with calculated metrics
+            for i, case in enumerate(cases, 1):
+                flops = 2 * case.m * case.n * case.k  # Basic GEMM FLOPS calculation
+                matrix_size = f"{case.m}×{case.n}×{case.k}"
+                log.info(
+                    f"{i:<6} {case.m:<8} {case.n:<8} {case.k:<8} {flops:<12,} {matrix_size}"
+                )
+
+            # Log statistics for this data type
+            m_values = sorted(set(case.m for case in cases))
+            n_values = sorted(set(case.n for case in cases))
+            k_values = sorted(set(case.k for case in cases))
+
+            log.info(f"\nStatistics for {data_type_name}:")
+            log.info(f"  M values: {m_values}")
+            log.info(f"  N values: {n_values}")
+            log.info(f"  K values: {k_values}")
+            log.info(f"  Total cases: {len(cases)}")
+
+            # Calculate total FLOPS for this data type
+            total_flops = sum(2 * case.m * case.n * case.k for case in cases)
+            log.info(f"  Total FLOPS: {total_flops:,}")
+
+        log.info(f"\n{'=' * 80}")
+        log.info("END OF TEST CASE MATRIX")
+        log.info(f"{'=' * 80}\n")
 
     def _create_kernel_spec(self, test_case: GemmTestCase) -> KernelSpec:
         """Create a kernel specification for a test case."""
