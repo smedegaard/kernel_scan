@@ -9,10 +9,11 @@ Kernel Scan simplifies the complex task of GPU kernel profiling by providing a c
 ## Features
 
 [x] Object-oriented design with multiple compute engine backends
+[x] Clean, ergonomic units system for performance metrics
 [] Type validation through Python type hints
 [] Dynamic backend discovery and loading
 [] Hardware-agnostic testing through mock engines
-[] Comprehensive metrics collection and visualization
+[x] Comprehensive metrics collection and visualization
 
 ## Philosophy
 
@@ -86,3 +87,32 @@ print(f"Throughput: {result.metrics['gflops']:.2f} GFLOPS")
 # Create visualization
 result.plot_performance()
 ```
+
+## Units System
+
+Kernel Scan includes a clean, ergonomic units system for working with performance metrics:
+
+```python
+from kernel_scan.core.units import TeraFlops, GigaBytesPerSecond, FlopsPerByte, peak_performance
+
+# Create performance metrics with explicit prefixes
+compute = TeraFlops(15.7)          # 15.7 TFLOPS
+bandwidth = GigaBytesPerSecond(900)  # 900 GB/s
+
+# Convert between units with different prefixes
+gflops = compute.to_giga()  # 15700 GFLOPS
+print(gflops)  # "15700.0 GFLOPS"
+
+# Calculate arithmetic intensity
+intensity = FlopsPerByte(4.0)  # 4.0 FLOPS/Byte
+
+# Apply the roofline model
+attainable = peak_performance(compute, bandwidth, intensity)
+print(f"Peak attainable performance: {attainable}")
+```
+
+The units system handles:
+- Automatic conversions between unit prefixes (kilo, mega, giga, tera, etc.)
+- Dimension tracking to prevent invalid operations
+- Mathematical operations and comparisons between compatible units
+- Performance analysis calculations like arithmetic intensity and roofline modeling
