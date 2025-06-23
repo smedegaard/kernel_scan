@@ -10,7 +10,7 @@ and automatic unit conversion.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, ClassVar, Type, Union
+from typing import Any, ClassVar, Optional, Type, Union
 
 
 @dataclass
@@ -98,35 +98,67 @@ class Unit(ABC):
 
         # Convert to the base value of the target unit
         base_val = self._convert_to_base_value(target_unit_class)
+        scaled_val = base_val / prefix.factor
 
-        # If target has specialized prefix subclasses, try to use them
-        if target_unit_class == Flops:
-            if prefix == Prefix.MEGA:
-                return MegaFlops(base_val / Prefix.MEGA.factor)
-            elif prefix == Prefix.GIGA:
-                return GigaFlops(base_val / Prefix.GIGA.factor)
-            elif prefix == Prefix.TERA:
-                return TeraFlops(base_val / Prefix.TERA.factor)
-            elif prefix == Prefix.PETA:
-                return PetaFlops(base_val / Prefix.PETA.factor)
-        elif target_unit_class == Byte:
-            if prefix == Prefix.KILO:
-                return KiloByte(base_val / Prefix.KILO.factor)
-            elif prefix == Prefix.MEGA:
-                return MegaByte(base_val / Prefix.MEGA.factor)
-            elif prefix == Prefix.GIGA:
-                return GigaByte(base_val / Prefix.GIGA.factor)
-            elif prefix == Prefix.TERA:
-                return TeraByte(base_val / Prefix.TERA.factor)
-        elif target_unit_class == BytesPerSecond:
-            if prefix == Prefix.GIGA:
-                return GigaBytesPerSecond(base_val / Prefix.GIGA.factor)
-            elif prefix == Prefix.TERA:
-                return TeraBytePerSecond(base_val / Prefix.TERA.factor)
+        # Use convenience class if available
+        return self._create_convenience_instance(
+            target_unit_class, prefix, scaled_val
+        ) or target_unit_class(scaled_val, prefix)
 
-        # Default case: create a new instance with the given prefix
-        new_val = base_val / prefix.factor
-        return target_unit_class(new_val, prefix)
+    def with_prefix(self, prefix: Prefix) -> "Unit":
+        """
+        Create a new instance with the same value but a different prefix.
+
+        Args:
+            prefix: The new prefix to use
+
+        Returns:
+            A new unit instance with the adjusted value
+        """
+        base_val = self.base_value
+        scaled_val = base_val / prefix.factor
+        base_class = self._get_base_class()
+
+        # Use convenience class if available
+        return self._create_convenience_instance(
+            base_class, prefix, scaled_val
+        ) or self.__class__(scaled_val, prefix)
+
+    def _create_convenience_instance(
+        self, unit_class: Type["Unit"], prefix: Prefix, value: float
+    ) -> Optional["Unit"]:
+        """Create a convenience class instance if one exists for the given unit class and prefix."""
+        convenience_map = {
+            (Flops, Prefix.MEGA): MegaFlops,
+            (Flops, Prefix.GIGA): GigaFlops,
+            (Flops, Prefix.TERA): TeraFlops,
+            (Flops, Prefix.PETA): PetaFlops,
+            (Byte, Prefix.KILO): KiloByte,
+            (Byte, Prefix.MEGA): MegaByte,
+            (Byte, Prefix.GIGA): GigaByte,
+            (Byte, Prefix.TERA): TeraByte,
+            (BytesPerSecond, Prefix.GIGA): GigaBytesPerSecond,
+            (BytesPerSecond, Prefix.TERA): TeraBytePerSecond,
+        }
+
+        convenience_class = convenience_map.get((unit_class, prefix))
+        return convenience_class(value) if convenience_class else None
+
+    def _get_base_class(self) -> Type["Unit"]:
+        """Get the base class for this unit."""
+        base_class_map = {
+            MegaFlops: Flops,
+            GigaFlops: Flops,
+            TeraFlops: Flops,
+            PetaFlops: Flops,
+            KiloByte: Byte,
+            MegaByte: Byte,
+            GigaByte: Byte,
+            TeraByte: Byte,
+            GigaBytesPerSecond: BytesPerSecond,
+            TeraBytePerSecond: BytesPerSecond,
+        }
+        return base_class_map.get(self.__class__, self.__class__)
 
     def _is_compatible_with(self, target_unit_class: Type["Unit"]) -> bool:
         """Check if this unit can be converted to the target unit."""
