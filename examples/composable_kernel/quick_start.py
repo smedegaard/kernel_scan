@@ -33,7 +33,7 @@ try:
     )
     from kernel_scan.api.operations.gemm import GemmParams
     from kernel_scan.core.specs import TensorSpec
-    from kernel_scan.visualization import generate_gemm_roofline_plots_by_group
+    from kernel_scan.visualization import generate_gemm_roofline_plots_by_data_type
 except ImportError as e:
     log.error(f"Error importing kernel_scan: {e}")
     log.error(
@@ -94,7 +94,7 @@ def main():
         raise e
 
     try:
-        figures = generate_gemm_roofline_plots_by_group(result_set)
+        figures = generate_gemm_roofline_plots_by_data_type(result_set)
         for group, fig in figures.items():
             fig.write_image(f"./plots/{group}.png")
     except Exception as e:

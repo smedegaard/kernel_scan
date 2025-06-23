@@ -19,8 +19,6 @@ sys.path.append(str(src_path))
 
 
 try:
-    # Import kernel_scan modules with the new GemmScan API
-    # Configure logging - MUST be imported after adding src to sys.path
     from kernel_scan.core.logging import configure_logging, get_logger
     from kernel_scan.operations.gemm import GemmScan
     from kernel_scan.types import DataType, EngineType
@@ -46,12 +44,26 @@ def main():
     # Configure and run the scan using the fluent API
     results = (
         scan.with_data_types(
-            [DataType.FLOAT32, DataType.FLOAT16, DataType.BFLOAT16, DataType.INT8]
+            [
+                # DataType.FLOAT32,
+                DataType.FLOAT16,
+                # DataType.BFLOAT16,
+                # DataType.INT8
+            ]
         )
-        .for_m_values([2**n for n in range(0, 9)])  # [1, 2, 4, 8, 16, 32, 64, 128, 256]
-        .for_n_values(
-            [2**n for n in range(6, 15)]
-        )  # [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+        # .for_m_values([1, 2, 512, 1024, 2048, 4096, 8192])
+        .for_m_values(
+            [
+                1,
+                2,
+            ]
+        )
+        # .for_n_values([64, 128, 256, 512, 1024, 2048, 4096])
+        .for_n_values([64, 128])
+        # .for_m_values([2**n for n in range(0, 3)])  # [1, 2, 4, 8, 16, 32, 64, 128, 256]
+        # .for_n_values(
+        #     [2**n for n in range(6, 8)]
+        # )  # [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
         .with_k_equals_n()  # This sets K = N for all test cases (enables Cartesian product mode)
         .with_engine_type(EngineType.COMPOSABLE_KERNEL)
         .iterations(10)
