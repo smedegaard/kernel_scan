@@ -39,6 +39,8 @@ class ComposableKernelEngine(ComputeEngine):
     This engine uses the ckProfiler tool to profile GEMM operations.
     """
 
+    ENGINE_TYPE = EngineType.COMPOSABLE_KERNEL
+
     def __init__(
         self,
         config: Optional[ProfileConfig] = None,

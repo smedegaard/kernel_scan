@@ -112,6 +112,27 @@ class DataType(Enum):
         except (KeyError, AttributeError):
             raise ValueError(f"Unknown data type: {format_str}")
 
+    @classmethod
+    def get_size_bytes(cls, dtype: "DataType") -> int:
+        """Get the size in bytes for a given data type."""
+        size_map = {
+            cls.FLOAT64: 8,  # 64-bit = 8 bytes
+            cls.FLOAT32: 4,  # 32-bit = 4 bytes
+            cls.FLOAT16: 2,  # 16-bit = 2 bytes
+            cls.BFLOAT16: 2,  # 16-bit = 2 bytes
+            cls.INT64: 8,  # 64-bit = 8 bytes
+            cls.INT32: 4,  # 32-bit = 4 bytes
+            cls.INT16: 2,  # 16-bit = 2 bytes
+            cls.INT8: 1,  # 8-bit = 1 byte
+            cls.UINT8: 1,  # 8-bit = 1 byte
+            cls.INT4: 1,  # 4-bit rounds up to 1 byte for storage
+            cls.BOOL: 1,  # 8-bit boolean = 1 byte
+        }
+        try:
+            return size_map.get(dtype)
+        except KeyError:
+            raise ValueError(f"Unknown data type: {dtype}")
+
 
 class OperationOutputs:
     """Base class for operation outputs."""

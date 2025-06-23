@@ -15,12 +15,8 @@ from kernel_scan.core.types import EngineType
 
 
 class ComputeEngine(abc.ABC):
-    """
-    Abstract base class for compute engine implementations.
-
-    All concrete engine implementations must inherit from this class and
-    implement its abstract methods.
-    """
+    # Each subclass must declare its engine type
+    ENGINE_TYPE: EngineType = None  # Will be overridden by subclasses
 
     def __init__(
         self,
@@ -34,12 +30,22 @@ class ComputeEngine(abc.ABC):
             config: Optional configuration for the engine
             accelerator_specs: Optional accelerator specifications for the engine
         """
+        if self.ENGINE_TYPE is None:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} must define ENGINE_TYPE class attribute"
+            )
+
+        self._engine_type = self.ENGINE_TYPE
         self._config = config or ProfileConfig.create_default()
         self._accelerator_specs = accelerator_specs
         self._initialized = False
 
+    @property
+    def engine_type(self) -> EngineType:
+        """Return the engine type."""
+        return self._engine_type
+
     @classmethod
-    @abc.abstractmethod
     def create(
         cls,
         engine_type: Union[EngineType, str],
@@ -48,18 +54,6 @@ class ComputeEngine(abc.ABC):
     ) -> "ComputeEngine":
         """
         Factory method for creating engine instances.
-
-        Args:
-            engine_type: Type of engine to create
-            config: Optional configuration for the engine
-            accelerator_specs: Optional hardware specifications for the accelerator
-
-        Returns:
-            ComputeEngine instance
-
-        Raises:
-            ImportError: If the required engine implementation is not available
-            ValueError: If the engine type is not supported
         """
         # Convert string to enum if needed
         if isinstance(engine_type, str):
@@ -76,9 +70,14 @@ class ComputeEngine(abc.ABC):
                     f"Valid types are: {', '.join(valid_types)}"
                 )
 
-        raise NotImplementedError(
-            f"Engine type {engine_type} is not supported by this engine implementation."
-        )
+        # Validate that this class can handle the requested engine type
+        if engine_type != cls.ENGINE_TYPE:
+            raise ValueError(
+                f"{cls.__name__} cannot create engine of type {engine_type}. "
+                f"Expected {cls.ENGINE_TYPE}"
+            )
+
+        return cls(config, accelerator_specs)
 
     @property
     def name(self) -> str:
