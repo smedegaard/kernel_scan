@@ -10,36 +10,26 @@ import sys
 from pathlib import Path
 
 # Add the src directory to sys.path to import kernel_scan
+# Note: We need to go up two levels since we're in examples/composable_kernel/
 project_root = Path(__file__).parent.parent.parent
 src_path = project_root / "src"
 sys.path.append(str(src_path))
 
-# Configure logging - MUST be imported after adding src to sys.path
-from kernel_scan.core.logging import configure_logging, get_logger
+try:
+    from kernel_scan import KernelSpec, Profiler, TensorSpec
+    from kernel_scan.core.logging import configure_logging, get_logger
+    from kernel_scan.operations.gemm import GemmParams
+    from kernel_scan.types import DataType, EngineType, Layout, OperationType
+except ImportError as e:
+    # log.error(f"Error importing kernel_scan: {e}")
+    # log.error(
+    #     "Make sure the kernel_scan package is properly installed or in the Python path."
+    # )
+    raise e
 
 # Configure logging with desired level
-configure_logging(level="debug")
+configure_logging(level="info")
 log = get_logger(__name__)
-
-try:
-    # Import kernel_scan modules
-    from kernel_scan import (
-        DataType,
-        EngineType,
-        KernelSpec,
-        Layout,
-        OperationType,
-        Profiler,
-    )
-    from kernel_scan.api.operations.gemm import GemmParams
-    from kernel_scan.core.specs import TensorSpec
-    from kernel_scan.visualization import generate_gemm_roofline_plots_by_data_type
-except ImportError as e:
-    log.error(f"Error importing kernel_scan: {e}")
-    log.error(
-        "Make sure the kernel_scan package is properly installed or in the Python path."
-    )
-    sys.exit(1)
 
 
 def main():
@@ -82,26 +72,20 @@ def main():
 
     log.info("Profiling with ComposableKernelEngine...")
     try:
-        # Pass the detected accelerator specs to the profiler
-        result_set = profiler.profile_with_engine(
+        _result_set = profiler.profile_with_engine(
             kernel_spec,
             EngineType.COMPOSABLE_KERNEL,
             warmup_iterations=2,
             output_file="./results/quickstart.jsonl",
         )
+
+        for result in _result_set.results:
+            log.info(f"Result: {result}")
     except Exception as e:
         log.error(f"Error during profiling: {e}")
         raise e
 
-    try:
-        figures = generate_gemm_roofline_plots_by_data_type(result_set)
-        for group, fig in figures.items():
-            fig.write_image(f"./plots/{group}.png")
-    except Exception as e:
-        log.error(f"Error during plotting: {e}")
-        raise e
-
-    log.info("\nQuick Start example completed!")
+    log.info("Quick Start example completed!")
 
 
 if __name__ == "__main__":
