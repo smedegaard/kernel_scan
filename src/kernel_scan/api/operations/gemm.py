@@ -18,7 +18,6 @@ from typing import (
     List,
     NamedTuple,
     Optional,
-    Tuple,
     Union,
 )
 
@@ -31,8 +30,10 @@ from kernel_scan.core.errors import (
     IncompatibleLayoutError,
     InvalidTensorShapeError,
     MissingDataTypeError,
+    MissingInputError,
     MissingOperationParamsError,
     MissingOutputError,
+    OperationParameterMismatchError,
     UnsupportedOperationTypeError,
 )
 from kernel_scan.core.logging import get_logger
@@ -314,7 +315,7 @@ def validate_gemm_operation(
     return True
 
 
-def calculate_gemm_flops(params: GemmParams) -> int:
+def calculate_flops(params: GemmParams) -> int:
     """
     Calculate the number of floating-point operations for a GEMM operation.
 
@@ -329,24 +330,65 @@ def calculate_gemm_flops(params: GemmParams) -> int:
     Returns:
         The number of floating-point operations
     """
-    raise NotImplementedError("calculate_gemm_flops is not implemented")
+    # Core GEMM operations: 2 operations per multiply-add for each element in output matrix
+    flops = 2 * params.m * params.n * params.k
+
+    # Account for alpha scaling if alpha is not 1.0
+    if params.alpha != 1.0:
+        flops += params.m * params.n
+
+    # Account for beta scaling if beta is not 0.0
+    if params.beta != 0.0:
+        flops += params.m * params.n
+
+    return flops
 
 
-def create_random_gemm_inputs(
-    params: GemmParams, data_type: DataType, seed: Optional[int] = None
-) -> Tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+def calculate_bytes_moved(params: GemmParams, dtype_size: int) -> int:
     """
-    Create random input matrices for GEMM operation using Polars.
+    Calculate bytes moved for GEMM: C = alpha * A * B + beta * C.
+
+    Memory access rules:
+    - Always read A (m x k) and B (k x n)
+    - Always write C (m x n)
+    - Read C only if beta != 0 (for beta * C)
+
+    Args:
+        params: GEMM parameters (m, n, k, alpha, beta)
+        dtype_size: Size of data type in bytes
+
+    Returns:
+        Total bytes moved
+    """
+    a_bytes = params.m * params.k * dtype_size  # Read A
+    b_bytes = params.k * params.n * dtype_size  # Read B
+    c_bytes = params.m * params.n * dtype_size  # Always write C
+
+    # Read C only if beta != 0
+    c_read_bytes = c_bytes if params.beta != 0.0 else 0
+
+    return a_bytes + b_bytes + c_read_bytes + c_bytes
+
+
+def calculate_arithmetic_intensity(params: GemmParams, dtype: DataType) -> float:
+    """
+    Calculate the arithmetic intensity (FLOPs per byte) for a GEMM operation.
+
+    Arithmetic intensity is defined as the ratio of the number of floating-point
+    operations to the number of bytes moved.
 
     Args:
         params: The GEMM operation parameters
-        data_type: The data type for the matrices
-        seed: Optional random seed for reproducibility
+        dtype: The data type used in the operation
 
     Returns:
-        Tuple of (A, B, C) matrices as Polars DataFrames
+        The arithmetic intensity in FLOPs/byte
     """
-    raise NotImplementedError("create_random_gemm_inputs")
+    flops = calculate_flops(params)
+    dtype_size = DataType.get_size_bytes(dtype)
+    bytes_moved = calculate_bytes_moved(params, dtype_size)
+
+    return flops / bytes_moved
 
 
 def verify_gemm_result(
