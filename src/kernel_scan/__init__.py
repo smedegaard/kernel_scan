@@ -11,7 +11,7 @@ import sys
 from kernel_scan.api import Profiler, engines, operations, visualization
 
 # Import core types and specs
-from kernel_scan.core import types
+from kernel_scan.core import types, units
 
 # Import core logging first to configure it before anything else
 from kernel_scan.core.logging import configure_logging, get_logger
@@ -26,6 +26,7 @@ from kernel_scan.core.specs import (
 sys.modules["kernel_scan.operations"] = operations
 sys.modules["kernel_scan.types"] = types
 sys.modules["kernel_scan.visualization"] = visualization
+sys.modules["kernel_scan.units"] = units
 
 # Also make the specific operation modules available directly
 # For example, this makes kernel_scan.api.operations.gemm available as kernel_scan.operations.gemm
@@ -41,6 +42,7 @@ __all__ = [
     "visualization",
     # Core modules
     "types",
+    "units",
     # Core specs
     "TensorSpec",
     "AcceleratorSpec",
