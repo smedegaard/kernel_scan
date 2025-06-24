@@ -101,9 +101,19 @@ class Unit(ABC):
         scaled_val = base_val / prefix.factor
 
         # Use convenience class if available
-        return self._create_convenience_instance(
+        convenience_instance = self._create_convenience_instance(
             target_unit_class, prefix, scaled_val
-        ) or target_unit_class(scaled_val, prefix)
+        )
+        if convenience_instance:
+            return convenience_instance
+
+        # Check if target class is a convenience class with fixed prefix
+        if target_unit_class.__init__ != Unit.__init__:
+            # For classes like Microsecond that have their own __init__ with fixed prefix
+            return target_unit_class(scaled_val)
+        else:
+            # For standard unit classes that accept a prefix parameter
+            return target_unit_class(scaled_val, prefix)
 
     def with_prefix(self, prefix: Prefix) -> "Unit":
         """

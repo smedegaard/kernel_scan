@@ -12,9 +12,30 @@ from typing import Any, Dict, List, Optional, Union
 import polars as pl
 
 from kernel_scan.core.logging import get_logger
-from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
+from kernel_scan.core.specs import AcceleratorSpec, KernelSpec, OperationParams
+from kernel_scan.core.units import BytesPerSecond, GigaFlops, Microsecond
 
 log = get_logger(__name__)
+
+
+@dataclass
+class Metrics:
+    """
+    Container class for storing metrics for individual profiling runs.
+
+    Attributes:
+        latency: units.Microsecond. Time taken by the kernel to execute.
+        memory_bandwidth: units.BytesPerSecond. Memory bandwidth achieved.
+        compute_rate: units.GFLOPS. Compute rate achieved.
+    """
+
+    latency: Microsecond
+    memory_bandwidth: BytesPerSecond
+    compute_rate: GigaFlops
+
+    def get(self, attr_name: str, default=None):
+        """Get attribute value by name, returning default if not found."""
+        return getattr(self, attr_name, default)
 
 
 @dataclass
@@ -24,7 +45,7 @@ class ProfileResult:
 
     Attributes:
         kernel_spec: The kernel specification that was profiled
-        metrics: Additional metrics (e.g., GFLOPS, bandwidth)
+        metrics: The measured values for the profile run.
         operation: Detailed operation description
         verification_result: Result of output verification (if performed)
         raw_data: Raw data from the profiling run
@@ -32,7 +53,7 @@ class ProfileResult:
     """
 
     kernel_spec: KernelSpec
-    metrics: Dict[str, float] = field(default_factory=dict)
+    metrics: Metrics = field(default_factory=Metrics)
     operation: str = ""
     verification_result: Optional[bool] = None
     raw_data: Dict[str, Any] = field(default_factory=dict)
@@ -113,6 +134,7 @@ class ProfileResultSet:
         self,
         results: Optional[List[ProfileResult]] = None,
         accelerator_specs: AcceleratorSpec = AcceleratorSpec(),
+        operation_params: OperationParams = OperationParams(),
     ):
         """
         Initialize a new ProfileResultSet.
@@ -223,13 +245,13 @@ class ProfileResultSet:
         )
 
     def mark_best_results(
-        self, metric: str = "time_ms", lower_is_better: bool = True
+        self, metric: str = "latency", lower_is_better: bool = True
     ) -> None:
         """
         Mark the best results in each group based on a metric.
 
         Args:
-            metric: Metric to use for comparison (e.g., 'time_ms', 'tflops')
+            metric: Metric to use for comparison (e.g., 'latency', 'compute_rate')
             lower_is_better: Whether lower values of the metric are better
         """
         if not self._results:

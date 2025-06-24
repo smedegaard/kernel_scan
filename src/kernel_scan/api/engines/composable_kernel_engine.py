@@ -20,13 +20,20 @@ from kernel_scan.api.operations.gemm import (
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import ComputeEngine
 from kernel_scan.core.logging import get_logger
-from kernel_scan.core.results import ProfileResult, ProfileResultSet
+from kernel_scan.core.results import Metrics, ProfileResult, ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec, TensorSpec
 from kernel_scan.core.types import (
     DataType,
     EngineType,
     Layout,
     OperationType,
+)
+from kernel_scan.core.units import (
+    GigaBytesPerSecond,
+    GigaFlops,
+    Microsecond,
+    Millisecond,
+    TeraFlops,
 )
 
 log = get_logger(__name__)
@@ -483,76 +490,54 @@ class ComposableKernelEngine(ComputeEngine):
     def _create_profile_result(
         self,
         kernel_spec: KernelSpec,
-        profile_data: [Dict[str, Any]],
+        profile_data: Dict[str, Any],
     ) -> ProfileResult:
         """
         Create a ProfileResult from the parsed profiler output.
 
         Args:
             kernel_spec: The kernel specification
-            profile_data: Parsed profiler output
+            profile_data: Parsed profiler output for a single kernel
 
         Returns:
             ProfileResult containing the profiling results
         """
-        # Extract timing information
-        kernel_times_ms = []
+        # Extract metrics and convert to appropriate unit types
+        # For latency: convert milliseconds to microseconds
+        time_ms = float(profile_data.get("time_ms", 0.0))
+        latency = Millisecond(time_ms).to(Microsecond)
 
-        # Extract kernel times from the profile data
-        # The format depends on the ckProfiler output, this is just an example
-        if "execution_time" in profile_data:
-            # Convert from microseconds to milliseconds
-            times = [float(t) / 1000.0 for t in profile_data["execution_time"]]
-            kernel_times_ms.extend(times)
-        elif (
-            "profiling" in profile_data
-            and "execution_time" in profile_data["profiling"]
-        ):
-            times = [
-                float(t) / 1000.0 for t in profile_data["profiling"]["execution_time"]
-            ]
-            kernel_times_ms.extend(times)
+        # For compute rate: convert TeraFLOPS to GigaFlops
+        tflops_value = float(profile_data.get("tflops", 0.0))
+        compute_rate = TeraFlops(tflops_value).to(GigaFlops)
 
-        # Extract metrics
-        metrics = {}
+        # For memory bandwidth: use GigaBytesPerSecond
+        gb_per_sec_value = float(profile_data.get("gb_per_sec", 0.0))
+        memory_bandwidth = GigaBytesPerSecond(gb_per_sec_value)
+
+        # Create Metrics instance
+        metrics = Metrics(
+            latency=latency,
+            memory_bandwidth=memory_bandwidth,
+            compute_rate=compute_rate,
+        )
 
         # Extract operation name/description
         operation = profile_data.get("operation", kernel_spec.name or "unnamed")
 
-        # Extract GFLOPS and bandwidth
-        if "gflops" in profile_data:
-            metrics["tflops"] = (
-                float(profile_data["gflops"]) / 1000.0
-            )  # Convert to TFLOPS
-
-        # Add bandwidth metric if available
-        if "bandwidth" in profile_data:
-            metrics["bandwidth"] = float(profile_data["bandwidth"])
-
         # Create profile result
-        return ProfileResult(
+        result = ProfileResult(
             kernel_spec=kernel_spec,
             metrics=metrics,
             operation=operation,
             raw_data=profile_data,
         )
 
-    def _get_data_type_size(self, data_type):
-        """Get the size in bytes of a data type."""
-        sizes = {
-            DataType.FLOAT32: 4,
-            DataType.FLOAT16: 2,
-            DataType.BFLOAT16: 2,
-            DataType.FLOAT64: 8,
-            DataType.INT8: 1,
-            DataType.UINT8: 1,
-            DataType.INT16: 2,
-            DataType.INT32: 4,
-            DataType.INT64: 8,
-            DataType.INT4: 0.5,
-            DataType.BOOL: 1,
-        }
-        return sizes.get(data_type, 4)
+        # Set is_best if available in the profile data
+        if "is_best" in profile_data:
+            result.is_best = bool(profile_data["is_best"])
+
+        return result
 
 
 class CkProfilerScanner:
@@ -698,7 +683,7 @@ class CkProfilerScanner:
                             print(f"  ✓ Success - results saved to {output_file}")
                         else:
                             print(
-                                f"  ✓ Success - Avg time: {result.timing.avg_kernel_time_ms:.2f} ms, GFLOPS: {result.metrics.get('gflops', 0):.2f}"
+                                f"  ✓ Success - Avg time: {result.timing.avg_kernel_time_ms:.2f} ms, GigaFlops: {result.metrics.get('gflops', 0):.2f}"
                             )
 
                     except Exception as e:
