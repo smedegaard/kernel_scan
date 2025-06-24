@@ -8,7 +8,7 @@ and library backends, focused on simplicity and usability.
 import sys
 
 # Import API components
-from kernel_scan.api import Profiler, engines, operations, visualization
+from kernel_scan.api import Profiler, engines, operations
 
 # Import core types and specs
 from kernel_scan.core import types, units
@@ -25,7 +25,6 @@ from kernel_scan.core.specs import (
 # Create aliases for commonly used modules to allow for more intuitive imports
 sys.modules["kernel_scan.operations"] = operations
 sys.modules["kernel_scan.types"] = types
-sys.modules["kernel_scan.visualization"] = visualization
 sys.modules["kernel_scan.units"] = units
 
 # Also make the specific operation modules available directly
@@ -39,7 +38,6 @@ __all__ = [
     "Profiler",
     "operations",
     "engines",
-    "visualization",
     # Core modules
     "types",
     "units",

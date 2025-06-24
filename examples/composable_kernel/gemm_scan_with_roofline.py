@@ -20,9 +20,8 @@ sys.path.append(str(src_path))
 
 try:
     from kernel_scan.core.logging import configure_logging, get_logger
-    from kernel_scan.operations.gemm import GemmScan
+    from kernel_scan.operations.gemm import GemmPlotter, GemmScan
     from kernel_scan.types import DataType, EngineType
-    from kernel_scan.visualization import generate_gemm_roofline_plots_by_data_type
 except ImportError as e:
     # log.error(f"Error importing kernel_scan: {e}")
     # log.error(
@@ -71,7 +70,7 @@ def main():
         .run()
     )
 
-    # Generate and save plots
+    # Generate and save plots using the new GemmPlotter
     for data_type, data_type_results in results.items():
         if not data_type_results:
             log.warning(f"No results for {data_type}, skipping plots")
@@ -83,17 +82,29 @@ def main():
                 DataType[data_type] if isinstance(data_type, str) else data_type
             )
 
-            figures = generate_gemm_roofline_plots_by_data_type(
-                result_sets=data_type_results, data_type=data_type_enum
+            # Use the new GemmPlotter class instead of the deprecated function
+            figures = GemmPlotter.generate_roofline_plots_by_data_type(
+                result_sets=data_type_results,
+                data_type=data_type_enum,
+                # Can also provide optional parameters:
+                # group_by="M"  # Default for GEMM
+                # title_prefix="My Custom Title"
             )
 
             for precision_name, fig in figures.items():
                 plot_file = scan._plots_dir / f"{precision_name}.png"
                 fig.write_image(plot_file)
                 log.info(f" 🖼️ Plot saved to: {plot_file}")
+
+                # Optionally save as interactive HTML
+                html_file = scan._plots_dir / f"{precision_name}.html"
+                fig.write_html(html_file)
+                log.info(f" 🌐 Interactive plot saved to: {html_file}")
         except Exception as e:
             log.error(f"Error generating plots for {data_type}: {e}")
-            raise e
+            import traceback
+
+            log.error(traceback.format_exc())
 
     log.info(
         f"\nScan completed!\n Results saved to: {scan._base_output_dir}. Plots can be found in {scan._plots_dir}."

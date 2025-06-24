@@ -89,6 +89,8 @@ class Profiler:
             raise ValueError(f"Kernel specification not supported by {engine.name}")
 
         # Create parent directory for output_file if it doesn't exist
+        if type(output_file) is str:
+            output_file = Path(output_file)
         if output_file is not None:
             output_dir = output_file.parent
             if not output_dir.exists():
