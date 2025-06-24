@@ -5,6 +5,7 @@ This module provides the Profiler class, which is the main entry point
 for profiling GPU kernels with different engine backends.
 """
 
+from pathlib import Path
 from typing import Dict, Optional, Union
 
 from kernel_scan.api.operations.gemm import GemmParams
@@ -48,7 +49,7 @@ class Profiler:
         return self._config
 
     @property
-    def results(self) -> ProfileResultSet:
+    def result_set(self) -> ProfileResultSet:
         """Return the profile result set."""
         return self._result_set
 
@@ -57,7 +58,7 @@ class Profiler:
         kernel_spec: KernelSpec,
         engine_type: Union[EngineType, str],
         warmup_iterations: Optional[int] = None,
-        output_file: Optional[str] = None,
+        output_file: Optional[Path] = None,
     ) -> ProfileResultSet:
         """
         Profile a kernel with a specific engine.
@@ -86,6 +87,15 @@ class Profiler:
         # Check if the kernel is supported
         if not engine.is_supported(kernel_spec):
             raise ValueError(f"Kernel specification not supported by {engine.name}")
+
+        # Create parent directory for output_file if it doesn't exist
+        if output_file is not None:
+            output_dir = output_file.parent
+            if not output_dir.exists():
+                log.warning(
+                    f"Output directory does not exist, creating it now: {output_dir}"
+                )
+                output_dir.mkdir(parents=True, exist_ok=True)
 
         # Profile the kernel
         result = engine.profile(kernel_spec, output_file=output_file)

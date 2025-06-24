@@ -76,7 +76,7 @@ def main():
             kernel_spec,
             EngineType.COMPOSABLE_KERNEL,
             warmup_iterations=2,
-            output_file="./results/quickstart.jsonl",
+            output_file=Path("./results/quickstart.jsonl"),
         )
 
         for result in _result_set.results:
