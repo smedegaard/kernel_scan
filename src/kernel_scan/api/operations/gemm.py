@@ -6,7 +6,6 @@ for the kernel_scan library. It provides the necessary functionality to
 define and validate GEMM operations for GPU profiling.
 """
 
-import itertools
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +22,8 @@ from typing import (
 
 import polars as pl
 
+from kernel_scan.api.profiler import Profiler
+from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import EngineType
 from kernel_scan.core.errors import (
     IncompatibleDataTypesError,
@@ -565,49 +566,6 @@ class GemmTestCase(NamedTuple):
         )
 
 
-@dataclass
-class GemmScanConfig:
-    """Configuration parameters for GEMM scanning."""
-
-    engine_type: Optional[EngineType] = None
-    data_types: List[DataType] = None
-    n_values: List[int] = None
-    m_values: List[int] = None
-    k_values: List[int] = None
-    nk_linked: bool = False  # When True, N=K in all test cases    static_nk: bool = False  # When True, N and K are fixed to static_nk_value
-
-    # Growing dimension configuration
-    growing_dimension: Optional[str] = (
-        None  # The dimension that grows: "M", "N", or "K"
-    )
-    dimension_relationships: Dict[str, Callable[[int], int]] = (
-        None  # Functions to compute other dimensions
-    )
-
-    iterations: int = 10
-    warmup_iterations: int = 5
-    layout_a: Layout = Layout.ROW_MAJOR
-    layout_b: Layout = Layout.ROW_MAJOR
-    layout_c: Layout = Layout.ROW_MAJOR
-    alpha: float = 1.0
-    beta: float = 0.0
-    output_dir: Path = Path("results")
-    timestamp_format: str = "%Y%m%d_%H%M%S"
-
-    def __post_init__(self):
-        """Initialize default values for lists."""
-        if self.data_types is None:
-            self.data_types = []
-        if self.n_values is None:
-            self.n_values = []
-        if self.m_values is None:
-            self.m_values = []
-        if self.k_values is None:
-            self.k_values = []
-        if self.dimension_relationships is None:
-            self.dimension_relationships = {}
-
-
 class GemmScan:
     """
     A fluent API for scanning GEMM performance across multiple dimensions and data types.
@@ -625,78 +583,106 @@ class GemmScan:
             .run())
     """
 
-    def __init__(self):
-        """Initialize the GEMM scanner with default configuration."""
-        # lazy import to avoid circular imports
-        from kernel_scan.api.profiler import Profiler
+    def __init__(self, profile_config: Optional[ProfileConfig] = None):
+        """
+        Initialize the GEMM scanner with default configuration.
 
-        self.config = GemmScanConfig()
-        self.profiler = Profiler()
-        self._results = {}
-        self._base_output_dir = None
-        self._plots_dir = None
+        Args:
+            profile_config: Optional profile configuration. If not provided, a default one will be used.
+        """
+        # Core scan parameters
+        self.engine_type: Optional[EngineType] = None
+        self.data_types: List[DataType] = []
+        self.m_values: List[int] = []
+        self.n_values: List[int] = []
+        self.k_values: List[int] = []
+        self.nk_linked: bool = False
+        self.iterations: int = 100
+        self.warmup_iterations: int = 10
+        self.layout_a: Layout = Layout.ROW_MAJOR
+        self.layout_b: Layout = Layout.ROW_MAJOR
+        self.layout_c: Layout = Layout.ROW_MAJOR
+        self.alpha: float = 1.0
+        self.beta: float = 0.0
+        self.output_dir: Union[str, Path] = Path("results")
+
+        # Advanced configuration
+        self.growing_dimension: Optional[str] = None
+        self.dimension_relationships: Dict[str, Callable[[int], int]] = {}
+
+        # Internal state
+        self._results: Dict[str, List[Any]] = {}
+        self._base_output_dir: Optional[Path] = None
+        self._plots_dir: Optional[Path] = None
+
+        # Profile configuration
+        self.profile_config = profile_config or ProfileConfig.create_default()
 
     def with_engine_type(self, engine_type: EngineType) -> "GemmScan":
         """
         Set the engine type to use for profiling.
         This builder method is mandatory before calling run().
         """
-        self.config.engine_type = engine_type
+        self.engine_type = engine_type
         return self
 
     def with_data_types(self, data_types: List[DataType]) -> "GemmScan":
         """Set the data types to scan."""
-        self.config.data_types = data_types
+        self.data_types = data_types
         return self
 
     def for_n_values(self, n_values: List[int]) -> "GemmScan":
         """Set the N dimension values to scan."""
-        self.config.n_values = n_values
+        self.n_values = n_values
         return self
 
     def for_m_values(self, m_values: List[int]) -> "GemmScan":
         """Set the M dimension values to scan."""
-        self.config.m_values = m_values
+        self.m_values = m_values
         return self
 
     def for_k_values(self, k_values: List[int]) -> "GemmScan":
         """Set the K dimension values to scan."""
-        self.config.k_values = k_values
+        self.k_values = k_values
         return self
 
     def with_k_equals_n(self) -> "GemmScan":
         """Configure the scan to use K = N for all test cases."""
-        self.config.nk_linked = True
+        self.nk_linked = True
         return self
 
     def iterations(self, count: int) -> "GemmScan":
         """Set the number of profiling iterations."""
-        self.config.iterations = count
+        self.iterations = count
+        # Update the profile_config with the same number of iterations
+        self.profile_config.iterations = count
         return self
 
     def warmup(self, count: int) -> "GemmScan":
         """Set the number of warmup iterations."""
-        self.config.warmup_iterations = count
+        self.warmup_iterations = count
+        # Update the profile_config with the same number of warmup iterations
+        self.profile_config.warmup_iterations = count
         return self
 
     def with_layouts(
         self, layout_a: Layout, layout_b: Layout, layout_c: Layout
     ) -> "GemmScan":
         """Set the matrix layouts for A, B, and C."""
-        self.config.layout_a = layout_a
-        self.config.layout_b = layout_b
-        self.config.layout_c = layout_c
+        self.layout_a = layout_a
+        self.layout_b = layout_b
+        self.layout_c = layout_c
         return self
 
     def with_scaling(self, alpha: float = 1.0, beta: float = 0.0) -> "GemmScan":
         """Set the scaling factors alpha and beta."""
-        self.config.alpha = alpha
-        self.config.beta = beta
+        self.alpha = alpha
+        self.beta = beta
         return self
 
     def output_to(self, directory: Union[str, Path]) -> "GemmScan":
         """Set the output directory for results."""
-        self.config.output_dir = Path(directory)
+        self.output_dir = Path(directory)
         return self
 
     def growing_with_respect_to(self, dimension: str) -> "GemmScan":
@@ -720,219 +706,160 @@ class GemmScan:
                 f"Growing dimension must be 'M', 'N', or 'K', got {dimension}"
             )
 
-        self.config.growing_dimension = dimension
+        self.growing_dimension = dimension
         return self
 
     def with_m_equals(self, func: Callable[[int], int]) -> "GemmScan":
         """Define how M should be computed based on the growing dimension."""
-        if self.config.growing_dimension == "M":
+        if self.growing_dimension == "M":
             raise ValueError(
                 "Cannot set a relationship for M when M is the growing dimension"
             )
-        self.config.dimension_relationships["M"] = func
+        self.dimension_relationships["M"] = func
         return self
 
     def with_n_equals(self, func: Callable[[int], int]) -> "GemmScan":
         """Define how N should be computed based on the growing dimension."""
-        if self.config.growing_dimension == "N":
+        if self.growing_dimension == "N":
             raise ValueError(
                 "Cannot set a relationship for N when N is the growing dimension"
             )
-        self.config.dimension_relationships["N"] = func
+        self.dimension_relationships["N"] = func
         return self
 
     def with_k_equals(self, func: Callable[[int], int]) -> "GemmScan":
         """Define how K should be computed based on the growing dimension."""
-        if self.config.growing_dimension == "K":
+        if self.growing_dimension == "K":
             raise ValueError(
                 "Cannot set a relationship for K when K is the growing dimension"
             )
-        self.config.dimension_relationships["K"] = func
+        self.dimension_relationships["K"] = func
         return self
 
     def _generate_test_cases(self) -> Iterator[GemmTestCase]:
-        """Generate all test cases as an iterator."""
-        test_cases = []
-
-        # Handle growing dimension case
-        if self.config.growing_dimension:
-            dimension = self.config.growing_dimension
-
-            # Get the values for the growing dimension
-            if dimension == "M":
-                growing_values = self.config.m_values
-            elif dimension == "N":
-                growing_values = self.config.n_values
-            elif dimension == "K":
-                growing_values = self.config.k_values
-
-            log.info(
-                f"Generating test cases for growing dimension '{dimension}' with values: {growing_values}"
-            )
-
-            # Check that we have relationship functions for the other dimensions
-            required_dimensions = {"M", "N", "K"} - {dimension}
-            missing_dimensions = required_dimensions - set(
-                self.config.dimension_relationships.keys()
-            )
-
-            if missing_dimensions:
-                raise ValueError(
-                    f"Missing relationship functions for dimensions: {missing_dimensions}. "
-                    f"When using growing_with_respect_to('{dimension}'), you must define "
-                    f"relationships for all other dimensions."
-                )
-
-            # For each data_type and growing value, compute the other dimensions
-            for data_type in self.config.data_types:
-                for value in growing_values:
-                    # Compute values for other dimensions
-                    m = (
-                        value
-                        if dimension == "M"
-                        else self.config.dimension_relationships["M"](value)
-                    )
-                    n = (
-                        value
-                        if dimension == "N"
-                        else self.config.dimension_relationships["N"](value)
-                    )
-                    k = (
-                        value
-                        if dimension == "K"
-                        else self.config.dimension_relationships["K"](value)
-                    )
-
-                    test_case = GemmTestCase(data_type=data_type, m=m, n=n, k=k)
-                    test_cases.append(test_case)
-
-        # Handle existing cases
-        elif self.config.nk_linked:
-            # For each (data_type, n, m) combination, use k=n
-            for data_type, n, m in itertools.product(
-                self.config.data_types, self.config.n_values, self.config.m_values
-            ):
-                test_case = GemmTestCase(data_type=data_type, m=m, n=n, k=n)
-                test_cases.append(test_case)
+        """Generate all test cases to run for this scan."""
+        if self.growing_dimension:
+            # Generate test cases based on the growing dimension
+            growing_dim = self.growing_dimension
+            for data_type in self.data_types:
+                if growing_dim == "M":
+                    for m in self.m_values:
+                        # Compute other dimensions based on M
+                        n = self.dimension_relationships["N"](m)
+                        if "K" in self.dimension_relationships:
+                            k = self.dimension_relationships["K"](m)
+                        else:
+                            k = n if self.nk_linked else self.k_values[0]
+                        yield GemmTestCase(
+                            data_type=data_type,
+                            m=m,
+                            n=n,
+                            k=k,
+                        )
+                elif growing_dim == "N":
+                    for n in self.n_values:
+                        # Compute other dimensions based on N
+                        m = self.dimension_relationships["M"](n)
+                        if "K" in self.dimension_relationships:
+                            k = self.dimension_relationships["K"](n)
+                        else:
+                            k = n if self.nk_linked else self.k_values[0]
+                        yield GemmTestCase(
+                            data_type=data_type,
+                            m=m,
+                            n=n,
+                            k=k,
+                        )
+                elif growing_dim == "K":
+                    for k in self.k_values:
+                        # Compute other dimensions based on K
+                        m = self.dimension_relationships["M"](k)
+                        n = self.dimension_relationships["N"](k)
+                        yield GemmTestCase(
+                            data_type=data_type,
+                            m=m,
+                            n=n,
+                            k=k,
+                        )
         else:
-            # For each (data_type, n, m, k) combination
-            for data_type, n, m, k in itertools.product(
-                self.config.data_types,
-                self.config.n_values,
-                self.config.m_values,
-                self.config.k_values,
-            ):
-                test_case = GemmTestCase(data_type=data_type, m=m, n=n, k=k)
-                test_cases.append(test_case)
+            # Generate all combinations
+            for data_type in self.data_types:
+                for m in self.m_values:
+                    for n in self.n_values:
+                        k_vals = [n] if self.nk_linked else self.k_values
+                        for k in k_vals:
+                            yield GemmTestCase(
+                                data_type=data_type,
+                                m=m,
+                                n=n,
+                                k=k,
+                            )
 
-        # Log the comprehensive test case matrix
-        self._log_test_case_matrix(test_cases)
-
-        # Yield all test cases
-        for test_case in test_cases:
-            yield test_case
-
-    def _log_test_case_matrix(self, test_cases: List[GemmTestCase]) -> None:
-        """Log a comprehensive matrix of all generated test cases."""
-        if not test_cases:
-            log.info("No test cases generated.")
-            return
-
-        # Group test cases by data type
-        test_cases_by_data_type = {}
-        for test_case in test_cases:
-            data_type_name = test_case.data_type.name
-            if data_type_name not in test_cases_by_data_type:
-                test_cases_by_data_type[data_type_name] = []
-            test_cases_by_data_type[data_type_name].append(test_case)
-
-        # Log summary statistics
-        total_cases = len(test_cases)
-        data_types = list(test_cases_by_data_type.keys())
-
-        log.info(f"\n{'=' * 80}")
-        log.info("GEMM TEST CASE MATRIX SUMMARY")
-        log.info(f"{'=' * 80}")
-        log.info(f"Total test cases: {total_cases}")
-        log.info(f"Data types: {', '.join(data_types)}")
-        log.info(
-            f"Cases per data type: {total_cases // len(data_types) if data_types else 0}"
-        )
-
-        # Log detailed matrix for each data type
-        for data_type_name, cases in test_cases_by_data_type.items():
-            log.info(f"\n{'-' * 60}")
-            log.info(f"TEST CASES FOR {data_type_name}")
-            log.info(f"{'-' * 60}")
-
-            # Create a table header
-            log.info(
-                f"{'Index':<6} {'M':<8} {'N':<8} {'K':<8} {'FLOPS':<12} {'Matrix Size'}"
-            )
-            log.info(f"{'-' * 60}")
-
-            # Log each test case with calculated metrics
-            for i, case in enumerate(cases, 1):
-                flops = 2 * case.m * case.n * case.k  # Basic GEMM FLOPS calculation
-                matrix_size = f"{case.m}×{case.n}×{case.k}"
-                log.info(
-                    f"{i:<6} {case.m:<8} {case.n:<8} {case.k:<8} {flops:<12,} {matrix_size}"
-                )
-
-            # Log statistics for this data type
-            m_values = sorted(set(case.m for case in cases))
-            n_values = sorted(set(case.n for case in cases))
-            k_values = sorted(set(case.k for case in cases))
-
-            log.info(f"\nStatistics for {data_type_name}:")
-            log.info(f"  M values: {m_values}")
-            log.info(f"  N values: {n_values}")
-            log.info(f"  K values: {k_values}")
-            log.info(f"  Total cases: {len(cases)}")
-
-            # Calculate total FLOPS for this data type
-            total_flops = sum(2 * case.m * case.n * case.k for case in cases)
-            log.info(f"  Total FLOPS: {total_flops:,}")
-
-        log.info(f"\n{'=' * 80}")
-        log.info("END OF TEST CASE MATRIX")
-        log.info(f"{'=' * 80}\n")
-
-    def _create_kernel_spec(self, test_case: GemmTestCase) -> KernelSpec:
+    def _create_kernel_spec(self, test_case: GemmTestCase) -> GemmKernelSpec:
         """Create a kernel specification for a test case."""
-        return (
-            KernelSpec.builder()
-            .operation_type(OperationType.GEMM)
-            .data_type(test_case.data_type)
-            .operation_params(
-                GemmParams(
-                    m=test_case.m,
-                    n=test_case.n,
-                    k=test_case.k,
-                    alpha=self.config.alpha,
-                    beta=self.config.beta,
-                    layout_a=self.config.layout_a,
-                    layout_b=self.config.layout_b,
-                    layout_c=self.config.layout_c,
-                )
+        try:
+            log.debug(f"Creating kernel spec for {test_case.name}")
+
+            # Create a GemmKernelSpecBuilder
+            builder = GemmKernelSpecBuilder()
+
+            # Set the data type
+            builder.data_type(test_case.data_type)
+
+            # Create GemmParams
+            params = GemmParams(
+                m=test_case.m,
+                n=test_case.n,
+                k=test_case.k,
+                alpha=self.alpha,
+                beta=self.beta,
+                layout_a=self.layout_a,
+                layout_b=self.layout_b,
+                layout_c=self.layout_c,
             )
-            .inputs(
-                a=TensorSpec.create_2d(
-                    test_case.m, test_case.k, self.config.layout_a, test_case.data_type
-                ),
-                b=TensorSpec.create_2d(
-                    test_case.k, test_case.n, self.config.layout_b, test_case.data_type
-                ),
+
+            # Set the operation parameters
+            builder.operation_params(params)
+
+            # Create and set input tensors
+            # Matrix A: M x K
+            a_tensor = TensorSpec.create_2d(
+                rows=test_case.m,
+                cols=test_case.k,
+                layout=self.layout_a,
+                data_type=test_case.data_type,
             )
-            .outputs(
-                c=TensorSpec.create_2d(
-                    test_case.m, test_case.n, self.config.layout_c, test_case.data_type
-                )
+
+            # Matrix B: K x N
+            b_tensor = TensorSpec.create_2d(
+                rows=test_case.k,
+                cols=test_case.n,
+                layout=self.layout_b,
+                data_type=test_case.data_type,
             )
-            .iterations(self.config.iterations)
-            .name(test_case.name)
-            .build()
-        )
+
+            # Set inputs
+            builder.inputs(a=a_tensor, b=b_tensor)
+
+            # Create and set output tensor
+            # Matrix C: M x N
+            c_tensor = TensorSpec.create_2d(
+                rows=test_case.m,
+                cols=test_case.n,
+                layout=self.layout_c,
+                data_type=test_case.data_type,
+            )
+
+            # Set outputs
+            builder.outputs(c=c_tensor)
+
+            # Build the kernel spec
+            kernel_spec = builder.build()
+            return kernel_spec
+
+        except Exception as e:
+            log.error(f"Error creating kernel spec for {test_case.name}: {e}")
+            raise
 
     def run(self) -> Dict[str, List[Any]]:
         """
@@ -950,35 +877,35 @@ class GemmScan:
         log.info(f"Generated {total_cases} test cases")
 
         # Initialize results dictionary
-        self._results = {dt.name: [] for dt in self.config.data_types}
+        self._results = {dt.name: [] for dt in self.data_types}
 
         # Log scan configuration
         log.info("Starting GEMM performance scan...")
-        log.info(f"Data types: {[dt.name for dt in self.config.data_types]}")
+        log.info(f"Data types: {[dt.name for dt in self.data_types]}")
 
-        if self.config.growing_dimension:
-            log.info(f"Growing dimension: {self.config.growing_dimension}")
-
-            # Log a sample of dimension values for clarity
-            dimension = self.config.growing_dimension
-            values = []
-            if dimension == "M":
-                values = self.config.m_values[:3]  # Show first 3 values as a sample
-            elif dimension == "N":
-                values = self.config.n_values[:3]
-            elif dimension == "K":
-                values = self.config.k_values[:3]
-
-            log.info(
-                f"{dimension} values (sample): {values}{'...' if len(values) < 3 else ''}"
-            )
-            log.info("Other dimensions will be computed based on relationships")
+        if self.growing_dimension:
+            log.info(f"Growing dimension: {self.growing_dimension}")
+            # Additional logging for the growing dimension configuration
+            if self.growing_dimension == "M":
+                sample_values = self.m_values[:3]  # Show first 3 values as a sample
+                log.info(
+                    f"M values (sample): {sample_values}{'...' if len(self.m_values) > 3 else ''}"
+                )
+            elif self.growing_dimension == "N":
+                sample_values = self.n_values[:3]
+                log.info(
+                    f"N values (sample): {sample_values}{'...' if len(self.n_values) > 3 else ''}"
+                )
+            elif self.growing_dimension == "K":
+                sample_values = self.k_values[:3]
+                log.info(
+                    f"K values (sample): {sample_values}{'...' if len(self.k_values) > 3 else ''}"
+                )
         else:
-            log.info(f"N values: {self.config.n_values}")
-            log.info(f"M values: {self.config.m_values}")
-            log.info(
-                f"K values: {'Same as N' if self.config.nk_linked else self.config.k_values}"
-            )
+            log.info(f"M values: {self.m_values}")
+            log.info(f"N values: {self.n_values}")
+            log.info(f"K values: {'Same as N' if self.nk_linked else self.k_values}")
+
         log.info(f"Output directory: {self._base_output_dir}")
 
         # Run all test cases
@@ -995,13 +922,16 @@ class GemmScan:
             log.info(f"[{i}/{total_cases}] Testing {test_case.name}")
 
             try:
-                # Create kernel spec and run profiling
+                # Create kernel spec
                 kernel_spec = self._create_kernel_spec(test_case)
-                result = self.profiler.profile_with_engine(
-                    kernel_spec,
-                    self.config.engine_type,
-                    warmup_iterations=self.config.warmup_iterations,
-                    output_file=str(output_file),
+
+                profiler = Profiler(config=self.profile_config, kernel_spec=kernel_spec)
+
+                # Run profiling
+                result = profiler.profile_with_engine(
+                    engine_type=self.engine_type,
+                    warmup_iterations=self.warmup_iterations,
+                    output_file=output_file,
                 )
 
                 # Store result
@@ -1015,90 +945,75 @@ class GemmScan:
 
         return self._results
 
-    def _validate_config(self):
-        """Validate that the configuration is complete and consistent."""
-        if self.config.engine_type is None:
-            raise ValueError("Engine type must be specified using with_engine_type()")
+    def _validate_config(self) -> None:
+        """Validate the configuration before running the scan."""
+        if not self.engine_type:
+            raise ValueError("Engine type must be set using with_engine_type()")
 
-        if not self.config.data_types:
-            raise ValueError(f"No data types specified. Got {self.config.data_types}")
+        if not self.data_types:
+            raise ValueError(
+                "At least one data type must be specified using with_data_types()"
+            )
 
-        # Validate based on configuration mode
-        if self.config.growing_dimension:
+        if not self.m_values:
+            raise ValueError("M values must be specified using for_m_values()")
+
+        if not self.n_values:
+            raise ValueError("N values must be specified using for_n_values()")
+
+        if not self.nk_linked and not self.k_values:
+            raise ValueError(
+                "K values must be specified using for_k_values() or with_k_equals_n()"
+            )
+
+        # Validate growing dimension configuration
+        if self.growing_dimension:
             # Check that we have values for the growing dimension
-            if self.config.growing_dimension == "M" and not self.config.m_values:
+            if self.growing_dimension == "M" and not self.m_values:
                 raise ValueError(
-                    f"No M values specified for growing dimension. Got {self.config.m_values}"
+                    f"No M values specified for growing dimension. Got {self.m_values}"
                 )
-            elif self.config.growing_dimension == "N" and not self.config.n_values:
+            elif self.growing_dimension == "N" and not self.n_values:
                 raise ValueError(
-                    f"No N values specified for growing dimension. Got {self.config.n_values}"
+                    f"No N values specified for growing dimension. Got {self.n_values}"
                 )
-            elif self.config.growing_dimension == "K" and not self.config.k_values:
+            elif self.growing_dimension == "K" and not self.k_values:
                 raise ValueError(
-                    f"No K values specified for growing dimension. Got {self.config.k_values}"
+                    f"No K values specified for growing dimension. Got {self.k_values}"
                 )
 
             # Check that we have relationship functions for the other dimensions
-            required_dimensions = {"M", "N", "K"} - {self.config.growing_dimension}
+            required_dimensions = {"M", "N", "K"} - {self.growing_dimension}
             missing_dimensions = required_dimensions - set(
-                self.config.dimension_relationships.keys()
+                self.dimension_relationships.keys()
             )
 
             if missing_dimensions:
                 raise ValueError(
                     f"Missing relationship functions for dimensions: {missing_dimensions}. "
-                    f"When using growing_with_respect_to('{self.config.growing_dimension}'), "
+                    f"When using growing_with_respect_to('{self.growing_dimension}'), "
                     f"you must define relationships for all other dimensions."
                 )
+
+    def _setup_directories(self) -> None:
+        """Set up output directories for the scan."""
+        output_dir = Path(self.output_dir)
+
+        # Create main output directory
+        engine_name = self.engine_type.name.lower()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        self._base_output_dir = output_dir / f"gemm_{engine_name}_{timestamp}"
+
+        if self._base_output_dir.exists():
+            log.warning(f"Output directory already exists: {self._base_output_dir}")
         else:
-            if not self.config.m_values:
-                raise ValueError(f"No M values specified. Got {self.config.m_values}")
+            log.info(f"Creating output directory: {self._base_output_dir}")
+            self._base_output_dir.mkdir(parents=True, exist_ok=True)
 
-            if not self.config.n_values:
-                raise ValueError(f"No N values specified. Got {self.config.n_values}")
-
-            if not self.config.nk_linked and not self.config.k_values:
-                raise ValueError(
-                    f"No K values specified and K ≠ N. Got {self.config.k_values}"
-                )
-
-    def _setup_directories(self):
-        """Set up the output directories for the scan."""
-        timestamp = datetime.now().strftime(self.config.timestamp_format)
-        self._base_output_dir = self.config.output_dir / f"gemm_scan_{timestamp}"
+        # Create plots directory
         self._plots_dir = self._base_output_dir / "plots"
-
-        # Create the base and plots directories
-        self._base_output_dir.mkdir(parents=True, exist_ok=True)
-        self._plots_dir.mkdir(parents=True, exist_ok=True)
-
-        log.info(f"Created base output directory: {self._base_output_dir}")
-        log.info(f"Created plots directory: {self._plots_dir}")
-
-        # Generate all test cases to identify all needed subdirectories
-        test_cases = list(self._generate_test_cases())
-        log.info(f"Setting up directories for {len(test_cases)} test cases")
-
-        # Create subdirectories for each data type and NK value
-        created_dirs = set()  # Track directories we've created to avoid duplicate logs
-
-        for test_case in test_cases:
-            # Create directory for each data type
-            data_type_dir = self._base_output_dir / test_case.data_type.name
-            if str(data_type_dir) not in created_dirs:
-                data_type_dir.mkdir(parents=True, exist_ok=True)
-                created_dirs.add(str(data_type_dir))
-                log.info(
-                    f"Created directory for {test_case.data_type.name}: {data_type_dir}"
-                )
-
-            # Create directory for each NK value
-            nk_dir = data_type_dir / f"NK{test_case.n}"
-            if str(nk_dir) not in created_dirs:
-                nk_dir.mkdir(parents=True, exist_ok=True)
-                created_dirs.add(str(nk_dir))
-                log.info(f"Created directory for NK{test_case.n}: {nk_dir}")
+        self._plots_dir.mkdir(exist_ok=True)
 
 
 class GemmPlotter(OperationPlotter):
