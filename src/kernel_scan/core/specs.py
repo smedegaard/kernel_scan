@@ -230,7 +230,7 @@ class KernelSpec(ABC):
     """
 
     data_type: DataType
-    iterations: int = 100
+    iterations: int = 10
     name: Optional[str] = None
     workspace_size: Optional[int] = None
 

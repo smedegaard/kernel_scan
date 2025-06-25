@@ -17,6 +17,7 @@ sys.path.append(str(src_path))
 
 try:
     from kernel_scan import KernelSpec, Profiler, TensorSpec
+    from kernel_scan.core.config import ProfilerConfigBuilder
     from kernel_scan.core.logging import configure_logging, get_logger
     from kernel_scan.operations.gemm import GemmParams
     from kernel_scan.types import DataType, EngineType, Layout, OperationType
@@ -66,14 +67,15 @@ def main():
     )
     log.info("Kernel specification created successfully.")
 
-    # Profile with a specific engine
+    # Initialize profiler with kernel specification
     log.info("\nInitializing profiler...")
-    profiler = Profiler()
+    # create default profiler configuration
+    profiler_config = ProfilerConfigBuilder().build()
+    profiler = Profiler(profiler_config, kernel_spec=kernel_spec)
 
     log.info("Profiling with ComposableKernelEngine...")
     try:
         _result_set = profiler.profile_with_engine(
-            kernel_spec,
             EngineType.COMPOSABLE_KERNEL,
             warmup_iterations=2,
             output_file=Path("./results/quickstart.jsonl"),

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import polars as pl
 
 from kernel_scan.core.logging import get_logger
-from kernel_scan.core.specs import AcceleratorSpec, KernelSpec, OperationParams
+from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 from kernel_scan.core.units import BytesPerSecond, GigaFlops, Microsecond
 
 log = get_logger(__name__)
@@ -43,17 +43,13 @@ class ProfileResult:
     Container for profiling results.
 
     Attributes:
-        kernel_spec: The kernel specification that was profiled
         metrics: The measured values for the profile run.
-        operation_params: Operation paramaters used to generate the profiling results
         verification_result: Result of output verification (if performed)
         raw_data: Raw data from the profiling run
         is_best: Flag indicating if this is the best result in a comparison
     """
 
-    kernel_spec: KernelSpec
     metrics: Metrics = field(default_factory=Metrics)
-    operation_params: OperationParams = field(default_factory=OperationParams)
     verification_result: Optional[bool] = None
     raw_data: Dict[str, Any] = field(default_factory=dict)
     is_best: bool = False
@@ -104,8 +100,8 @@ class ProfileResultSet:
     def __init__(
         self,
         results: Optional[List[ProfileResult]] = None,
-        accelerator_spec: Optional[AcceleratorSpec] = None,
-        kernel_spec: Optional[KernelSpec] = None,
+        kernel_spec: KernelSpec = None,
+        accelerator_spec: AcceleratorSpec = None,
     ):
         """
         Initialize a new ProfileResultSet.
@@ -118,30 +114,23 @@ class ProfileResultSet:
         self._results = results or []
         self._df = None
         self._engine_name = None
+        self._accelerator_spec = accelerator_spec
         self._kernel_spec = kernel_spec
-        self._hardware_info = {}
 
-        # If kernel_spec is None but we have results, try to get it from the first result
-        if self._kernel_spec is None and self._results:
-            self._kernel_spec = self._results[0].kernel_spec
+        if self._accelerator_spec is None:
+            raise ValueError("accelerator_spec is required")
+        if self._kernel_spec is None:
+            raise ValueError("kernel_spec is required")
+
+    @property
+    def accelerator_spec(self) -> Optional[AcceleratorSpec]:
+        """Get the accelerator specification used for profiling."""
+        return self._accelerator_spec
 
     @property
     def kernel_spec(self) -> Optional[KernelSpec]:
-        """
-        Get the kernel specification.
-
-        If no kernel_spec was explicitly set, try to get it from the first result.
-        """
-        if self._kernel_spec is not None:
-            return self._kernel_spec
-        elif self._results:
-            return self._results[0].kernel_spec
-        return None
-
-    @kernel_spec.setter
-    def kernel_spec(self, value: Optional[KernelSpec]):
-        """Set the kernel specification."""
-        self._kernel_spec = value
+        """Get the kernel specification used for profiling."""
+        return self._kernel_spec
 
     @property
     def engine_name(self) -> str:
@@ -152,16 +141,6 @@ class ProfileResultSet:
     def engine_name(self, name: str):
         """Set the engine name used for profiling."""
         self._engine_name = name
-
-    @property
-    def hardware_info(self) -> Dict[str, Any]:
-        """Get information about the hardware used."""
-        return self._hardware_info
-
-    @hardware_info.setter
-    def hardware_info(self, info: Dict[str, Any]):
-        """Set information about the hardware used."""
-        self._hardware_info = info
 
     def add_result(self, result: ProfileResult) -> None:
         """
@@ -201,34 +180,6 @@ class ProfileResultSet:
 
         return self._df
 
-    # def compare(
-    #     self, group_by: str, metric: str = "time_ms"
-    # ) -> Union["pl.DataFrame", Dict[str, Any]]:
-    #     """
-    #     Compare results grouped by a specific attribute.
-
-    #     Args:
-    #         group_by: Attribute to group by (e.g., 'datatype', 'operation')
-    #         metric: Metric to compare (e.g., 'time_ms', 'tflops')
-
-    #     Returns:
-    #         A DataFrame with grouped comparison results
-    #     """
-    #     df = self.dataframe
-    #     if len(df) == 0:
-    #         return pl.DataFrame()
-
-    #     # Group by the specified attribute and calculate summary statistics
-    #     return df.group_by(group_by).agg(
-    #         [
-    #             pl.mean(metric).alias(f"{metric}_mean"),
-    #             pl.min(metric).alias(f"{metric}_min"),
-    #             pl.max(metric).alias(f"{metric}_max"),
-    #             pl.std(metric).alias(f"{metric}_std"),
-    #             pl.count().alias("count"),
-    #         ]
-    #     )
-
     # TODO: change to take units.Dimension instead of str for `metric`
     def mark_best_results(
         self, metric: str = "latency", lower_is_better: bool = True
@@ -243,10 +194,19 @@ class ProfileResultSet:
         if not self._results:
             return
 
+        print("^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^")
+        print()
+        print(self.accelerator_spec)
+        print()
+        print()
+        print(self.kernel_spec)
+        print()
+        print("^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^")
+
         # Group results by operation type and data type
         grouped_results = {}
         for result in self._results:
-            key = (result.kernel_spec.operation_type, result.kernel_spec.data_type)
+            key = (self.kernel_spec.operation_type, self.kernel_spec.data_type)
             if key not in grouped_results:
                 grouped_results[key] = []
             grouped_results[key].append(result)

@@ -51,16 +51,14 @@ class ComposableKernelEngine(ComputeEngine):
     def __init__(
         self,
         config: Optional[ProfileConfig] = None,
-        accelerator_spec: Optional[AcceleratorSpec] = None,
     ):
         """
         Initialize the Composable Kernel engine.
 
         Args:
-            config: Optional configuration for the engine
-            accelerator_spec: Optional accelerator specifications for the engine
+            config: configuration for the engine
         """
-        super().__init__(config, accelerator_spec)
+        super().__init__(config)
         self._profiler_path = None
 
     def initialize(self) -> bool:
@@ -90,14 +88,6 @@ class ComposableKernelEngine(ComputeEngine):
         self._profiler_path = profiler_path
         self._initialized = True
 
-        # Set accelerator specs if not provided
-        if self._accelerator_spec is None:
-            # Auto-detect hardware
-            self._accelerator_spec = AcceleratorSpec.detect_hardware()
-            log.info(f"Detected hardware: {self._accelerator_spec.name}")
-        else:
-            log.info(f"Using provided hardware specs: {self._accelerator_spec.name}")
-
         return True
 
     def is_supported(self, kernel_spec: KernelSpec) -> bool:
@@ -122,7 +112,10 @@ class ComposableKernelEngine(ComputeEngine):
         return True
 
     def profile(
-        self, kernel_spec: KernelSpec, output_file: Optional[str] = None
+        self,
+        kernel_spec: KernelSpec,
+        accelerator_spec: AcceleratorSpec,
+        output_file: Optional[str] = None,
     ) -> ProfileResultSet:
         """
         Profile the given kernel specification using ckProfiler.
@@ -189,16 +182,18 @@ class ComposableKernelEngine(ComputeEngine):
             ]
 
             # Create result set with the profile results
-            result_set = ProfileResultSet(profile_results, self.accelerator_spec)
+            result_set = ProfileResultSet(
+                profile_results, kernel_spec, accelerator_spec
+            )
 
             # Set engine and hardware info
             result_set.engine_name = "ComposableKernel"
             result_set.engine_info = {"profiler_path": self._profiler_path}
-            result_set.hardware_info = self.get_hardware_info()
+            # result_set.hardware_info = self.get_hardware_info()
 
             # Mark the best result if there are multiple results
             if len(profile_results) > 1:
-                result_set.mark_best_results(metric="time_ms", lower_is_better=True)
+                result_set.mark_best_results()
 
             return result_set
         except subprocess.CalledProcessError as e:
@@ -232,20 +227,20 @@ class ComposableKernelEngine(ComputeEngine):
         Raises:
             ValueError: If the engine type is not COMPOSABLE_KERNEL
         """
-        # Convert string to enum if needed
-        if isinstance(engine_type, str):
-            try:
-                engine_type = next(
-                    e
-                    for e in EngineType
-                    if e.name.lower() == engine_type.lower().replace(" ", "_")
-                )
-            except StopIteration:
-                valid_types = [e.name.lower() for e in EngineType]
-                raise ValueError(
-                    f"Unsupported engine type: {engine_type}. "
-                    f"Valid types are: {', '.join(valid_types)}"
-                )
+        # # Convert string to enum if needed
+        # if isinstance(engine_type, str):
+        #     try:
+        #         engine_type = next(
+        #             e
+        #             for e in EngineType
+        #             if e.name.lower() == engine_type.lower().replace(" ", "_")
+        #         )
+        #     except StopIteration:
+        #         valid_types = [e.name.lower() for e in EngineType]
+        #         raise ValueError(
+        #             f"Unsupported engine type: {engine_type}. "
+        #             f"Valid types are: {', '.join(valid_types)}"
+        #         )
 
         # Check if this is the right engine type
         if engine_type != EngineType.COMPOSABLE_KERNEL:
@@ -255,7 +250,7 @@ class ComposableKernelEngine(ComputeEngine):
             )
 
         # Create and return instance
-        return cls(config, accelerator_spec)
+        return cls(config)
 
     def get_available_kernels(self) -> List[Dict[str, Any]]:
         """
@@ -523,9 +518,7 @@ class ComposableKernelEngine(ComputeEngine):
         )
 
         result = ProfileResult(
-            kernel_spec=kernel_spec,
             metrics=metrics,
-            operation_params=kernel_spec.operation_params,
             raw_data=profile_data,
         )
 

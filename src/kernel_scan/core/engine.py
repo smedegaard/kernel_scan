@@ -9,8 +9,8 @@ import abc
 from typing import Any, Dict, List, Optional, Union
 
 from kernel_scan.core.config import ProfileConfig
-from kernel_scan.core.results import ProfileResultSet
-from kernel_scan.core.specs import  KernelSpec
+from kernel_scan.core.results import ProfileResult, ProfileResultSet
+from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
 from kernel_scan.core.types import EngineType
 
 
@@ -27,7 +27,6 @@ class ComputeEngine(abc.ABC):
 
         Args:
             config: Optional configuration for the engine
-            accelerator_specs: Optional accelerator specifications for the engine
         """
         if self.ENGINE_TYPE is None:
             raise NotImplementedError(
@@ -97,6 +96,24 @@ class ComputeEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def _create_profile_result(
+        self,
+        kernel_spec: KernelSpec,
+        profile_data: Dict[str, Any],
+    ) -> ProfileResult:
+        """
+        Create a ProfileResult from the parsed profiler output.
+
+        Args:
+            kernel_spec: The kernel specification
+            profile_data: Parsed profiler output for a single kernel
+
+        Returns:
+            ProfileResult containing the profiling results
+        """
+        pass
+
+    @abc.abstractmethod
     def is_supported(self, kernel_spec: KernelSpec) -> bool:
         """
         Check if the engine supports the given kernel specification.
@@ -110,12 +127,15 @@ class ComputeEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def profile(self, kernel_spec: KernelSpec) -> ProfileResultSet:
+    def profile(
+        self, kernel_spec: KernelSpec, accelerator_spec: AcceleratorSpec
+    ) -> ProfileResultSet:
         """
         Profile the given kernel specification.
 
         Args:
             kernel_spec: The kernel specification to profile
+            accelerator_spec: The accelerator specification to profile
 
         Returns:
             ProfileResult containing the profiling results
