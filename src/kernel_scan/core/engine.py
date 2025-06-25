@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.results import ProfileResultSet
-from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
+from kernel_scan.core.specs import  KernelSpec
 from kernel_scan.core.types import EngineType
 
 
@@ -21,7 +21,6 @@ class ComputeEngine(abc.ABC):
     def __init__(
         self,
         config: Optional[ProfileConfig] = None,
-        accelerator_specs: Optional[AcceleratorSpec] = None,
     ):
         """
         Initialize the compute engine.
@@ -37,7 +36,6 @@ class ComputeEngine(abc.ABC):
 
         self._engine_type = self.ENGINE_TYPE
         self._config = config or ProfileConfig.create_default()
-        self._accelerator_specs = accelerator_specs
         self._initialized = False
 
     @property
@@ -50,7 +48,6 @@ class ComputeEngine(abc.ABC):
         cls,
         engine_type: Union[EngineType, str],
         config: Optional[ProfileConfig] = None,
-        accelerator_specs: Optional[AcceleratorSpec] = None,
     ) -> "ComputeEngine":
         """
         Factory method for creating engine instances.
@@ -77,7 +74,7 @@ class ComputeEngine(abc.ABC):
                 f"Expected {cls.ENGINE_TYPE}"
             )
 
-        return cls(config, accelerator_specs)
+        return cls(config)
 
     @property
     def name(self) -> str:
@@ -88,11 +85,6 @@ class ComputeEngine(abc.ABC):
     def config(self) -> ProfileConfig:
         """Return the engine configuration."""
         return self._config
-
-    @property
-    def accelerator_specs(self) -> AcceleratorSpec:
-        """Return the accelerator specifications for the engine."""
-        return self._accelerator_specs
 
     @abc.abstractmethod
     def initialize(self) -> bool:
@@ -142,32 +134,6 @@ class ComputeEngine(abc.ABC):
             List of dictionaries describing available kernels
         """
         pass
-
-    def get_hardware_info(self) -> Dict[str, Any]:
-        """
-        Get information about the hardware used by this engine.
-
-        Returns:
-            Dictionary containing hardware information
-        """
-        if self._accelerator_specs is None:
-            # If no accelerator specs have been set, return minimal info
-            return {
-                "name": "Unknown",
-                "vendor": "Unknown",
-            }
-
-        # Return hardware info from accelerator specs
-        hw_info = {
-            "name": self._accelerator_specs.name,
-            "memory_size_gb": self._accelerator_specs.memory_size_gb,
-            "peak_memory_bandwidth_gbps": self._accelerator_specs.peak_memory_bandwidth_gbps,
-        }
-
-        # Add additional specs
-        hw_info.update(self._accelerator_specs.additional_specs)
-
-        return hw_info
 
     def shutdown(self) -> None:
         """Release resources used by the engine."""

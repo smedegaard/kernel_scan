@@ -6,15 +6,14 @@ for profiling GPU kernels with different engine backends.
 """
 
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Any
 
-from kernel_scan.api.operations.gemm import GemmParams
 from kernel_scan.core.config import ProfileConfig
 from kernel_scan.core.engine import ComputeEngine
 from kernel_scan.core.logging import get_logger
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
-from kernel_scan.core.types import EngineType, Layout, OperationType
+from kernel_scan.core.types import EngineType
 
 log = get_logger(__name__)
 
@@ -30,18 +29,21 @@ class Profiler:
     def __init__(
         self,
         config: Optional[ProfileConfig] = None,
-        accelerator_specs: Optional[AcceleratorSpec] = None,
+        accelerator_spec: Optional[AcceleratorSpec] = None,
     ):
         """
         Initialize a new Profiler instance.
 
         Args:
             config: Optional configuration for the profiler
+            accelerator_spec: Optional accelerator specifications
         """
         self._config = config or ProfileConfig.create_default()
         self._engines: Dict[EngineType, ComputeEngine] = {}
-        self._result_set = ProfileResultSet()
-        self._accelerator_specs = accelerator_specs
+        # Initialize with None for kernel_spec since we don't have it yet
+        # We'll set it properly when we profile a specific kernel
+        self._result_set = ProfileResultSet(accelerator_spec=accelerator_spec)
+        self._accelerator_spec = accelerator_spec
 
     @property
     def config(self) -> ProfileConfig:
@@ -52,6 +54,11 @@ class Profiler:
     def result_set(self) -> ProfileResultSet:
         """Return the profile result set."""
         return self._result_set
+
+    @property
+    def accelerator_spec(self) -> Optional[AcceleratorSpec]:
+        """Return the accelerator specification."""
+        return self._accelerator_spec
 
     def profile_with_engine(
         self,
@@ -70,7 +77,7 @@ class Profiler:
             output_file: Optional file to save the results to
 
         Returns:
-            ProfileResult containing the profiling results
+            ProfileResultSet containing the profiling results with the kernel_spec always set
 
         Raises:
             ValueError: If the engine type is not supported or the kernel specification is not supported
@@ -80,9 +87,7 @@ class Profiler:
             self._config.warmup_iterations = warmup_iterations
 
         # Get or create the engine
-        engine = self._get_engine(
-            engine_type, accelerator_specs=self._accelerator_specs
-        )
+        engine = self._get_engine(engine_type, accelerator_spec=self._accelerator_spec)
 
         # Check if the kernel is supported
         if not engine.is_supported(kernel_spec):
@@ -102,90 +107,25 @@ class Profiler:
         # Profile the kernel
         result = engine.profile(kernel_spec, output_file=output_file)
 
-        # Save the result to the result set
+        # Create a new ProfileResultSet with the result and kernel_spec
+        result_set = ProfileResultSet(
+            results=[result],
+            accelerator_spec=self._accelerator_spec,
+            kernel_spec=kernel_spec,
+        )
+
+        result_set.engine_name = engine.name
+
         self._result_set.add_result(result)
+        if self._result_set.kernel_spec is None:
+            self._result_set.kernel_spec = kernel_spec
 
-        # Return the result
-        return result
-
-    def profile_gemm(
-        self,
-        m: int,
-        n: int,
-        k: int,
-        data_type,
-        engine_type: Union[EngineType, str],
-        output_file: str,
-        **kwargs,
-    ) -> ProfileResultSet:
-        """
-        Profile a GEMM operation with simplified parameters.
-
-        This is a convenience method for profiling GEMM operations without
-        having to create a full KernelSpec object.
-
-        Args:
-            m: Number of rows in matrices A and C
-            n: Number of columns in matrices B and C
-            k: Number of columns in matrix A / rows in matrix B
-            data_type: Data type for the operation
-            engine_type: The type of engine to use
-            **kwargs: Additional parameters for the GEMM operation
-
-        Returns:
-            ProfileResult containing the profiling results
-
-        Raises:
-            ValueError: If the engine type is not supported or the kernel specification is not supported
-        """
-        from kernel_scan.core.specs import TensorSpec
-
-        # Extract additional parameters
-        alpha = kwargs.get("alpha", 1.0)
-        beta = kwargs.get("beta", 0.0)
-        layout_a = kwargs.get("layout_a", Layout.ROW_MAJOR)
-        layout_b = kwargs.get("layout_b", Layout.ROW_MAJOR)
-        layout_c = kwargs.get("layout_c", Layout.ROW_MAJOR)
-        iterations = kwargs.get("iterations", 100)
-        warmup_iterations = kwargs.get("warmup_iterations", 10)
-        name = kwargs.get("name", f"GEMM_M{m}_N{n}_K{k}")
-
-        # Create a GEMM kernel specification
-        kernel_spec = (
-            KernelSpec.builder()
-            .operation_type(OperationType.GEMM)
-            .data_type(data_type)
-            .operation_params(
-                GemmParams(
-                    m=m,
-                    n=n,
-                    k=k,
-                    alpha=alpha,
-                    beta=beta,
-                    layout_a=layout_a,
-                    layout_b=layout_b,
-                    layout_c=layout_c,
-                )
-            )
-            .inputs(
-                a=TensorSpec.create_2d(m, k, layout_a, data_type),
-                b=TensorSpec.create_2d(k, n, layout_b, data_type),
-            )
-            .outputs(c=TensorSpec.create_2d(m, n, layout_c, data_type))
-            .iterations(iterations)
-            .name(name)
-            .build()
-        )
-
-        # Profile with the specified engine
-        return self.profile_with_engine(
-            kernel_spec, engine_type, warmup_iterations, output_file
-        )
+        return result_set
 
     def _get_engine(
         self,
         engine_type: Union[EngineType, str],
-        accelerator_specs: Optional[AcceleratorSpec],
+        accelerator_spec: Optional[AcceleratorSpec],
     ) -> ComputeEngine:
         """
         Get or create an engine instance.
@@ -223,13 +163,13 @@ class Profiler:
                 )
 
                 engine = ComposableKernelEngine.create(
-                    engine_type, self._config, self._accelerator_specs
+                    engine_type, self._config, self._accelerator_spec
                 )
             elif engine_type == EngineType.MOCK:
                 from kernel_scan.api.engines.mock_engine import MockEngine
 
                 engine = MockEngine.create(
-                    engine_type, self._config, self._accelerator_specs
+                    engine_type, self._config, self._accelerator_spec
                 )
             else:
                 raise ValueError(f"Unsupported engine type: {engine_type}")
@@ -244,3 +184,29 @@ class Profiler:
         for engine in self._engines.values():
             engine.shutdown()
         self._engines.clear()
+
+    def get_hardware_info(self) -> Dict[str, Any]:
+        """
+        Get information about the hardware used by this engine.
+
+        Returns:
+            Dictionary containing hardware information
+        """
+        if self._accelerator_specs is None:
+            # If no accelerator specs have been set, return minimal info
+            return {
+                "name": "Unknown",
+                "vendor": "Unknown",
+            }
+
+        # Return hardware info from accelerator specs
+        hw_info = {
+            "name": self._accelerator_specs.name,
+            "memory_size_gb": self._accelerator_specs.memory_size_gb,
+            "peak_memory_bandwidth_gbps": self._accelerator_specs.peak_memory_bandwidth_gbps,
+        }
+
+        # Add additional specs
+        hw_info.update(self._accelerator_specs.additional_specs)
+
+        return hw_info

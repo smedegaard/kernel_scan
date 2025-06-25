@@ -102,6 +102,38 @@ class KernelSpecBuilder(ABC):
         self._workspace_size = size
         return self
 
+    def get_operation_type(self) -> Optional[OperationType]:
+        """Get the operation type."""
+        return self._operation_type
+
+    def get_data_type(self) -> Optional[DataType]:
+        """Get the data type."""
+        return self._data_type
+
+    def get_operation_params(self) -> Optional[OperationParams]:
+        """Get operation-specific parameters."""
+        return self._operation_params
+
+    def get_inputs(self) -> Dict[str, "TensorSpec"]:
+        """Get input tensor specifications."""
+        return self._inputs
+
+    def get_outputs(self) -> Dict[str, "TensorSpec"]:
+        """Get output tensor specifications."""
+        return self._outputs
+
+    def get_iterations(self) -> int:
+        """Get the number of profiling iterations."""
+        return self._iterations
+
+    def get_name(self) -> Optional[str]:
+        """Get the name for the kernel specification."""
+        return self._name
+
+    def get_workspace_size(self) -> Optional[int]:
+        """Get the workspace size in bytes."""
+        return self._workspace_size
+
     @abstractmethod
     def _validate_config(self):
         """

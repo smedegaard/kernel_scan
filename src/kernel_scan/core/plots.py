@@ -14,6 +14,7 @@ import polars as pl
 
 from kernel_scan.core.logging import get_logger
 from kernel_scan.core.results import ProfileResultSet
+from kernel_scan.core.specs import AcceleratorSpec
 from kernel_scan.core.types import DataType, OperationType
 
 log = get_logger(__name__)
@@ -33,7 +34,8 @@ def combine_result_sets(result_sets: List[ProfileResultSet]) -> ProfileResultSet
         return ProfileResultSet()
 
     # Use the first result_set as the base
-    combined = ProfileResultSet(accelerator_specs=result_sets[0].accelerator_specs)
+    # TODO: not happy with this implementation
+    combined = ProfileResultSet(accelerator_spec=result_sets[0].accelerator_spec)
     combined.engine_name = result_sets[0].engine_name
     combined.engine_info = result_sets[0].engine_info
 
@@ -85,33 +87,10 @@ class OperationPlotter(ABC):
         pass
 
     @classmethod
-    @abstractmethod
-    def get_default_hover_data(cls) -> Dict[str, bool]:
-        """
-        Get the default hover data configuration for this operation type.
-
-        Returns:
-            Dictionary mapping column names to boolean visibility values
-        """
-        pass
-
-    @classmethod
-    @abstractmethod
-    def get_default_group_by(cls) -> str:
-        """
-        Get the default column to group by for this operation type.
-
-        Returns:
-            Column name to use for grouping
-        """
-        pass
-
-    @classmethod
-    def generate_roofline_plots_by_data_type(
+    def generate_roofline_plots(
         cls,
-        result_sets: List[ProfileResultSet],
-        data_type: DataType,
-        group_by: Optional[str] = None,
+        result_set: ProfileResultSet,
+        accelerator_spec: AcceleratorSpec,
         title_prefix: Optional[str] = None,
     ) -> Dict[str, "go.Figure"]:
         """
@@ -126,102 +105,61 @@ class OperationPlotter(ABC):
         Returns:
             Dictionary with a single entry keyed by data type name
         """
-        # Use operation-specific default if not provided
-        if group_by is None:
-            group_by = cls.get_default_group_by()
-
         # Combine all result sets
-        combined_result_set = combine_result_sets(result_sets)
-
-        if not combined_result_set.results:
-            log.warning(f"No results to plot for {data_type.name}")
-            return {}
 
         # Get hardware name for title
-        hardware_name = (
-            combined_result_set.accelerator_specs.name
-            if combined_result_set.accelerator_specs
-            else "Unknown Accelerator"
-        )
+        hardware_name = accelerator_spec.name
 
-        try:
-            # Calculate roofline data using operation-specific implementation
-            df = cls.calculate_roofline_data(combined_result_set, data_type, "tflops")
+        # Calculate roofline data using operation-specific implementation
+        df = cls.calculate_roofline_data(result_set)
 
-            if len(df) == 0:
-                log.warning(f"No data available for precision {data_type.name}")
-                return {}
+        title_base = f"{title_prefix} " if title_prefix else ""
 
-            # Force categorical coloring of group_by column
-            if group_by in df.columns:
-                df = df.sort(group_by)
-                df = df.with_columns([pl.col(group_by).cast(pl.Utf8)])
-            else:
-                log.warning(
-                    f"Group by column '{group_by}' not found in DataFrame for {data_type.name}"
-                )
-                return {}
-
-            # Sort by arithmetic intensity for better line drawing
-            df = df.sort("arithmetic_intensity")
-
-            title_base = f"{title_prefix} " if title_prefix else ""
-
-            # Get operation-specific hover data
-            hover_data = cls.get_default_hover_data()
-
-            # Create scatter plot
+        try:  # Create scatter plot
             fig = px.scatter(
                 df,
                 x="arithmetic_intensity",
                 y="tflops",
                 log_x=True,
                 log_y=True,
-                color=group_by,
+                # color=group_by,
                 color_discrete_sequence=px.colors.qualitative.G10,
                 size="time_scaled" if "time_scaled" in df.columns else None,
-                hover_data=hover_data
-                if all(col in df.columns for col in hover_data)
-                else None,
-                labels={
-                    "arithmetic_intensity": "Arithmetic Intensity (FLOPs/Byte)",
-                    "tflops": f"Performance (TFLOPs - {data_type.name})",
-                    "time_ms": "Execution Time (ms)",
-                },
-                title=f"{title_base}{hardware_name} Roofline Analysis - {data_type.name} ({cls.get_operation_type().name})",
+                # hover_data=hover_data
+                # if all(col in df.columns for col in hover_data)
+                # else None,
+                # labels={
+                #     "arithmetic_intensity": "Arithmetic Intensity (FLOPs/Byte)",
+                #     "tflops": f"Performance (TFLOPs - {kernel_spec.data_type.name})",
+                #     "time_ms": "Execution Time (ms)",
+                # },
+                # title=f"{title_base}{hardware_name} Roofline Analysis - {data_type.name} ({cls.get_operation_type().name})",
                 height=600,
             )
 
             # Create roofline line with more points for smoother curve
-            x_min = float(df["arithmetic_intensity"].min())
-            x_max = float(df["arithmetic_intensity"].max())
+            # x_min = float(df["y"].min())
+            # x_max = float(df["arithmetic_intensity"].max())
 
-            # Generate more points for a smoother roofline
-            import numpy as np
+            # peak_compute = float(df["peak_compute"].first())
+            # peak_bandwidth = float(df["peak_bandwidth"].first())
 
-            x_range = np.logspace(np.log10(x_min * 0.5), np.log10(x_max * 2), 100)
-            peak_compute = float(df["peak_compute"].first())
-            peak_bandwidth = float(df["peak_bandwidth"].first())
+            # roofline_y = np.minimum(peak_compute, peak_bandwidth)
 
-            roofline_y = np.minimum(peak_compute, peak_bandwidth * x_range)
+            # # Add the roofline as a reference line
+            # fig.add_trace(
+            #     go.Scatter(
+            #         x=attainable_performance,
+            #         y=roofline_y,
+            #         mode="lines",
+            #         line=dict(color="tomato", width=2),
+            #         opacity=0.7,
+            #         name="Roofline",
+            #     )
+            # )
 
-            # Add the roofline as a reference line
-            fig.add_trace(
-                go.Scatter(
-                    x=x_range,
-                    y=roofline_y,
-                    mode="lines",
-                    line=dict(color="tomato", width=2),
-                    opacity=0.7,
-                    name="Roofline",
-                )
-            )
-
-            log.info(f"Generated roofline plot for {data_type.name}")
-            return {data_type.name: fig}
-
-        except Exception as e:
-            log.error(f"Error generating plot for {data_type.name}: {e}")
+        except Exception:
+            # log.error(f"Error generating plot for {data_type.name}: {e}")
             import traceback
 
             log.error(traceback.format_exc())

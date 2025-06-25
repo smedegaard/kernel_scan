@@ -11,4 +11,5 @@ dependencies = [
     "polars>=1.30.0",
     "pyarrow>=20.0.0",
     "kaleido>=1.0.0",
+    "jupyter>=1.1.1",
 ]

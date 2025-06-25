@@ -6,8 +6,7 @@ visualizing kernel profiling results.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import polars as pl
 
@@ -46,7 +45,7 @@ class ProfileResult:
     Attributes:
         kernel_spec: The kernel specification that was profiled
         metrics: The measured values for the profile run.
-        operation: Detailed operation description
+        operation_params: Operation paramaters used to generate the profiling results
         verification_result: Result of output verification (if performed)
         raw_data: Raw data from the profiling run
         is_best: Flag indicating if this is the best result in a comparison
@@ -54,70 +53,42 @@ class ProfileResult:
 
     kernel_spec: KernelSpec
     metrics: Metrics = field(default_factory=Metrics)
-    operation: str = ""
+    operation_params: OperationParams = field(default_factory=OperationParams)
     verification_result: Optional[bool] = None
     raw_data: Dict[str, Any] = field(default_factory=dict)
     is_best: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert the profile result to a dictionary for serialization."""
-        # If raw_data is already populated with all the needed info, use it directly
-        if self.raw_data and all(
-            key in self.raw_data for key in ["operation", "time_ms", "tflops"]
-        ):
-            return self.raw_data.copy()
+        """
+        Convert ProfileResult to a flattened dictionary suitable for DataFrame creation.
 
-        # Otherwise, construct the dictionary from the ProfileResult attributes
-        result_dict = {
-            "operation": self.operation or f"{self.kernel_spec.name}",
-            "is_best": self.is_best,
-        }
+        This method flattens nested objects into a single-level dictionary with
+        appropriate key prefixes to avoid key collisions and to make the structure
+        compatible with Polars' DataFrame creation.
 
-        # Add metrics
-        result_dict.update(self.metrics)
+        Returns:
+            A flattened dictionary representation of the ProfileResult.
+        """
+        result_dict = {}
 
-        # Extract operation parameters
-        if self.kernel_spec.operation_type.name.lower() == "gemm":
-            # Extract GEMM parameters
-            params = self.kernel_spec.operation_params
-            if hasattr(params, "__dict__"):
-                params_dict = params.__dict__
-                if "params" in params_dict and hasattr(
-                    params_dict["params"], "__dict__"
-                ):
-                    gemm_params = params_dict["params"].__dict__
-                    result_dict.update(
-                        {
-                            "M": gemm_params.get("m", 0),
-                            "N": gemm_params.get("n", 0),
-                            "K": gemm_params.get("k", 0),
-                        }
-                    )
+        # Add basic properties
+        result_dict["is_best"] = self.is_best
 
-                    # Add layout information if available
-                    for layout_key in ["layout_a", "layout_b", "layout_c"]:
-                        if layout_key in gemm_params and hasattr(
-                            gemm_params[layout_key], "name"
-                        ):
-                            result_dict[layout_key] = gemm_params[
-                                layout_key
-                            ].name.replace("_", "")
+        result_dict["data_type"] = self.kernel_spec.data_type.name
 
-        # Add data type information
-        data_type = self.kernel_spec.data_type.name.lower()
-        result_dict.update(
-            {
-                "datatype": data_type,
-                "input_datatype": data_type,
-                "weight_datatype": data_type,
-                "output_datatype": data_type,
-                "operation_type": self.kernel_spec.operation_type.name.lower(),
-            }
-        )
+        result_dict["kernel_name"] = self.kernel_spec.name
 
-        # Add timestamp (use current time if not available)
+        result_dict["operation_type"] = self.kernel_spec.operation_type.name
 
-        result_dict["timestamp"] = datetime.now().isoformat()
+        # Extract metrics properties
+        result_dict["latency_value"] = self.metrics.latency.value
+        result_dict["latency_unit"] = self.metrics.latency.symbol
+
+        result_dict["memory_bandwidth_value"] = self.metrics.memory_bandwidth.value
+        result_dict["memory_bandwidth_unit"] = self.metrics.memory_bandwidth.symbol
+
+        result_dict["compute_rate_value"] = self.metrics.compute_rate.value
+        result_dict["comput_rate_unit"] = self.metrics.compute_rate.symbol
 
         return result_dict
 
@@ -133,20 +104,44 @@ class ProfileResultSet:
     def __init__(
         self,
         results: Optional[List[ProfileResult]] = None,
-        accelerator_specs: AcceleratorSpec = AcceleratorSpec(),
-        operation_params: OperationParams = OperationParams(),
+        accelerator_spec: Optional[AcceleratorSpec] = None,
+        kernel_spec: Optional[KernelSpec] = None,
     ):
         """
         Initialize a new ProfileResultSet.
 
         Args:
             results: Optional list of ProfileResult objects to initialize with
+            accelerator_spec: Optional accelerator specification
+            kernel_spec: Optional kernel specification
         """
         self._results = results or []
         self._df = None
-        self._engine_name = "unknown"
-        self._engine_info = {}
-        self.accelerator_specs = accelerator_specs
+        self._engine_name = None
+        self._kernel_spec = kernel_spec
+        self._hardware_info = {}
+
+        # If kernel_spec is None but we have results, try to get it from the first result
+        if self._kernel_spec is None and self._results:
+            self._kernel_spec = self._results[0].kernel_spec
+
+    @property
+    def kernel_spec(self) -> Optional[KernelSpec]:
+        """
+        Get the kernel specification.
+
+        If no kernel_spec was explicitly set, try to get it from the first result.
+        """
+        if self._kernel_spec is not None:
+            return self._kernel_spec
+        elif self._results:
+            return self._results[0].kernel_spec
+        return None
+
+    @kernel_spec.setter
+    def kernel_spec(self, value: Optional[KernelSpec]):
+        """Set the kernel specification."""
+        self._kernel_spec = value
 
     @property
     def engine_name(self) -> str:
@@ -157,16 +152,6 @@ class ProfileResultSet:
     def engine_name(self, name: str):
         """Set the engine name used for profiling."""
         self._engine_name = name
-
-    @property
-    def engine_info(self) -> Dict[str, Any]:
-        """Get additional information about the engine."""
-        return self._engine_info
-
-    @engine_info.setter
-    def engine_info(self, info: Dict[str, Any]):
-        """Set additional information about the engine."""
-        self._engine_info = info
 
     @property
     def hardware_info(self) -> Dict[str, Any]:
@@ -206,7 +191,7 @@ class ProfileResultSet:
         return self._results
 
     @property
-    def dataframe(self) -> pl.DataFrame:
+    def results_as_dataframe(self) -> pl.DataFrame:
         """
         Get a Polars DataFrame of all results.
         """
@@ -216,34 +201,35 @@ class ProfileResultSet:
 
         return self._df
 
-    def compare(
-        self, group_by: str, metric: str = "time_ms"
-    ) -> Union["pl.DataFrame", Dict[str, Any]]:
-        """
-        Compare results grouped by a specific attribute.
+    # def compare(
+    #     self, group_by: str, metric: str = "time_ms"
+    # ) -> Union["pl.DataFrame", Dict[str, Any]]:
+    #     """
+    #     Compare results grouped by a specific attribute.
 
-        Args:
-            group_by: Attribute to group by (e.g., 'datatype', 'operation')
-            metric: Metric to compare (e.g., 'time_ms', 'tflops')
+    #     Args:
+    #         group_by: Attribute to group by (e.g., 'datatype', 'operation')
+    #         metric: Metric to compare (e.g., 'time_ms', 'tflops')
 
-        Returns:
-            A DataFrame with grouped comparison results
-        """
-        df = self.dataframe
-        if len(df) == 0:
-            return pl.DataFrame()
+    #     Returns:
+    #         A DataFrame with grouped comparison results
+    #     """
+    #     df = self.dataframe
+    #     if len(df) == 0:
+    #         return pl.DataFrame()
 
-        # Group by the specified attribute and calculate summary statistics
-        return df.group_by(group_by).agg(
-            [
-                pl.mean(metric).alias(f"{metric}_mean"),
-                pl.min(metric).alias(f"{metric}_min"),
-                pl.max(metric).alias(f"{metric}_max"),
-                pl.std(metric).alias(f"{metric}_std"),
-                pl.count().alias("count"),
-            ]
-        )
+    #     # Group by the specified attribute and calculate summary statistics
+    #     return df.group_by(group_by).agg(
+    #         [
+    #             pl.mean(metric).alias(f"{metric}_mean"),
+    #             pl.min(metric).alias(f"{metric}_min"),
+    #             pl.max(metric).alias(f"{metric}_max"),
+    #             pl.std(metric).alias(f"{metric}_std"),
+    #             pl.count().alias("count"),
+    #         ]
+    #     )
 
+    # TODO: change to take units.Dimension instead of str for `metric`
     def mark_best_results(
         self, metric: str = "latency", lower_is_better: bool = True
     ) -> None:

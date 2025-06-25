@@ -40,6 +40,7 @@ from kernel_scan.core.logging import get_logger
 from kernel_scan.core.plots import OperationPlotter
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.specs import (
+    AcceleratorSpec,
     KernelSpec,
     KernelSpecBuilder,
     TensorSpec,
@@ -1128,10 +1129,7 @@ class GemmPlotter(OperationPlotter):
 
     @classmethod
     def calculate_roofline_data(
-        cls,
-        result_set: ProfileResultSet,
-        precision: DataType = DataType.FLOAT32,
-        compute_unit: str = "tflops",
+        cls, result_set: ProfileResultSet, accelerator_spec: AcceleratorSpec
     ) -> "pl.DataFrame":
         """
         Calculate data needed for roofline model visualization for GEMM operations.
@@ -1144,107 +1142,135 @@ class GemmPlotter(OperationPlotter):
         Returns:
             DataFrame with additional columns for roofline analysis
         """
-        # Extract DataFrame from ProfileResultSet
-        df = result_set.dataframe
+        # Check if there are results to process
+        if not result_set.results:
+            log.warning("No results in result_set")
+            return pl.DataFrame()
+
+        # Get peak performance values from accelerator specs
+        peak_compute = accelerator_spec.get_peak_compute(result_set.get_data_type())
+        peak_bandwidth = accelerator_spec.peak_bandwidth
+
+        # Get the dataframe from the result_set
+        df = result_set.results_as_dataframe
 
         if len(df) == 0:
             log.warning("Empty dataframe in result_set")
             return pl.DataFrame()
 
-        log.debug(f"Initial dataframe has {len(df)} rows")
-        log.debug(f"Columns: {df.columns}")
+        log.info(f"Initial dataframe has {len(df)} rows")
+        log.info(df)
 
-        if "is_best" in df.columns:
-            # Handle both boolean and string representations
-            df = df.filter((pl.col("is_best") == True) | (pl.col("is_best") == "true"))
-            log.info(f"Filtered to {len(df)} best results")
-        else:
-            log.warning("No 'is_best' column found - using all results")
+        return pl.DataFrame()
+        # # Calculate arithmetic intensity using the function from operations/gemm.py
+        # # We use map_elements to apply it to each row in a struct
+        # df = df.with_columns(
+        #     [
+        #         pl.struct(["M", "N", "K", "data_type"])
+        #         .map_elements(
+        #             lambda row: calculate_arithmetic_intensity(
+        #                 GemmParams(m=row["M"], n=row["N"], k=row["K"]),
+        #                 DataType.from_string(row["data_type"]),
+        #             ),
+        #             return_dtype=pl.Float64,
+        #         )
+        #         .alias("arithmetic_intensity")
+        #     ]
+        # )
 
-        if len(df) == 0:
-            log.warning("No best results found after filtering")
-            return pl.DataFrame()
+        # # Create a unique group identifier for each configuration
+        # df = df.with_columns(
+        #     [
+        #         (
+        #             pl.col("M").cast(pl.Utf8)
+        #             + "_"
+        #             + pl.col("N").cast(pl.Utf8)
+        #             + "_"
+        #             + pl.col("K").cast(pl.Utf8)
+        #         ).alias("group")
+        #     ]
+        # )
 
-        # Get peak performance for the specified precision
-        peak_compute = result_set.accelerator_specs.get_peak_compute(precision)
-        peak_bandwidth = result_set.accelerator_specs.peak_bandwidth
+        # # Calculate memory constraint line using units
+        # df = df.with_columns(
+        #     [
+        #         (peak_bandwidth * pl.col("arithmetic_intensity")).alias(
+        #             "memory_constraint"
+        #         )
+        #     ]
+        # )
 
-        log.info(
-            f"Peak compute: {peak_compute} TFLOPS, Peak bandwidth: {peak_bandwidth} GB/s"
-        )
+        # # Calculate attainable performance (min of compute peak and memory constraint)
+        # df = df.with_columns(
+        #     [
+        #         pl.min_horizontal(
+        #             peak_compute, peak_bandwidth * pl.col("arithmetic_intensity")
+        #         ).alias("attainable_performance")
+        #     ]
+        # )
 
-        # Ensure we have tflops column
-        if "tflops" not in df.columns and "gflops" in df.columns:
-            df = df.with_columns([(pl.col("gflops") / 1000).alias("tflops")])
-        elif "tflops" not in df.columns:
-            log.error("No tflops or gflops column found")
-            return pl.DataFrame()
+        # df = df.with_columns(
+        #     [
+        #         pl.col("compute_rate")
+        #         .map_elements(
+        #             lambda gflops: GigaFlops(gflops).to(TeraFlops).base_value,
+        #             return_dtype=pl.Float64,
+        #         )
+        #     ]
+        # )
 
-        # Calculate GEMM-specific arithmetic intensity
-        df = df.with_columns(
-            [
-                (
-                    (pl.col("M") * pl.col("N") * pl.col("K"))
-                    / (
-                        pl.col("M") * pl.col("K")
-                        + pl.col("N") * pl.col("K")
-                        + pl.col("M") * pl.col("N")
-                    )
-                ).alias("arithmetic_intensity"),
-                (
-                    pl.col("M").cast(pl.Utf8)
-                    + "_"
-                    + pl.col("N").cast(pl.Utf8)
-                    + "_"
-                    + pl.col("K").cast(pl.Utf8)
-                ).alias("group"),
-            ]
-        )
+        # # Handle time metrics
+        # if "latency" in df.columns:
+        #     # Convert microseconds to milliseconds for visualization
+        #     df = df.with_columns(
+        #         [
+        #             pl.col("latency")
+        #             .map_elements(
+        #                 lambda us: Microsecond(us).to(Millisecond).base_value,
+        #                 return_dtype=pl.Float64,
+        #             )
+        #             .alias("time_ms"),
+        #             (
+        #                 pl.col("latency")
+        #                 .map_elements(
+        #                     lambda us: Microsecond(us).to(Millisecond).base_value,
+        #                     return_dtype=pl.Float64,
+        #                 )
+        #                 .sqrt()
+        #             ).alias("time_scaled"),
+        #         ]
+        #     )
+        # elif "time_ms" in df.columns:
+        #     df = df.with_columns([(pl.col("time_ms").sqrt()).alias("time_scaled")])
+        # elif "avg_kernel_time_ms" in df.columns:
+        #     df = df.with_columns(
+        #         [
+        #             pl.col("avg_kernel_time_ms").alias("time_ms"),
+        #             (pl.col("avg_kernel_time_ms").sqrt()).alias("time_scaled"),
+        #         ]
+        #     )
 
-        # Calculate memory constraint line
-        df = df.with_columns(
-            [
-                (peak_bandwidth * pl.col("arithmetic_intensity")).alias(
-                    "memory_constraint"
-                )
-            ]
-        )
+        # # Add precision information
+        # df = df.with_columns(
+        #     [
+        #         pl.lit(precision.name).alias("precision_format"),
+        #         pl.lit(peak_compute).alias("peak_compute"),
+        #         pl.lit(peak_bandwidth).alias("peak_bandwidth"),
+        #     ]
+        # )
 
-        # Calculate attainable performance (min of compute peak and memory constraint)
-        df = df.with_columns(
-            [
-                pl.min_horizontal(
-                    peak_compute, peak_bandwidth * pl.col("arithmetic_intensity")
-                ).alias("attainable_performance")
-            ]
-        )
+        # log.debug(f"Final dataframe has {len(df)} rows")
+        # if len(df) > 0:
+        #     log.debug(
+        #         f"Sample arithmetic intensity values: {df['arithmetic_intensity'].to_list()[:3]}"
+        #     )
+        #     if "tflops" in df.columns:
+        #         log.debug(f"Sample tflops values: {df['tflops'].to_list()[:3]}")
+        #     elif "gflops" in df.columns:
+        #         log.debug(f"Sample gflops values: {df['gflops'].to_list()[:3]}")
 
-        if "time_ms" in df.columns:
-            df = df.with_columns([(pl.col("time_ms").sqrt()).alias("time_scaled")])
-        elif "avg_kernel_time_ms" in df.columns:
-            df = df.with_columns(
-                [
-                    pl.col("avg_kernel_time_ms").alias("time_ms"),
-                    (pl.col("avg_kernel_time_ms").sqrt()).alias("time_scaled"),
-                ]
-            )
-
-        # Add precision information
-        df = df.with_columns(
-            [
-                pl.lit(precision.name).alias("precision_format"),
-                pl.lit(peak_compute).alias("peak_compute"),
-                pl.lit(peak_bandwidth).alias("peak_bandwidth"),
-            ]
-        )
-
-        log.debug(f"Final dataframe has {len(df)} rows")
-        log.debug(
-            f"Sample arithmetic intensity values: {df['arithmetic_intensity'].to_list()[:3]}"
-        )
-        log.debug(f"Sample tflops values: {df['tflops'].to_list()[:3]}")
-
-        return df
+        # return df
 
 
+## should be at the end of the file
 register_operation_builder(OperationType.GEMM, GemmKernelSpecBuilder)

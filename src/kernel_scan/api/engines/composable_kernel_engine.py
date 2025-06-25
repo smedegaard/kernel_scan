@@ -51,16 +51,16 @@ class ComposableKernelEngine(ComputeEngine):
     def __init__(
         self,
         config: Optional[ProfileConfig] = None,
-        accelerator_specs: Optional[AcceleratorSpec] = None,
+        accelerator_spec: Optional[AcceleratorSpec] = None,
     ):
         """
         Initialize the Composable Kernel engine.
 
         Args:
             config: Optional configuration for the engine
-            accelerator_specs: Optional accelerator specifications for the engine
+            accelerator_spec: Optional accelerator specifications for the engine
         """
-        super().__init__(config, accelerator_specs)
+        super().__init__(config, accelerator_spec)
         self._profiler_path = None
 
     def initialize(self) -> bool:
@@ -91,12 +91,12 @@ class ComposableKernelEngine(ComputeEngine):
         self._initialized = True
 
         # Set accelerator specs if not provided
-        if self._accelerator_specs is None:
+        if self._accelerator_spec is None:
             # Auto-detect hardware
-            self._accelerator_specs = AcceleratorSpec.detect_hardware()
-            log.info(f"Detected hardware: {self._accelerator_specs.name}")
+            self._accelerator_spec = AcceleratorSpec.detect_hardware()
+            log.info(f"Detected hardware: {self._accelerator_spec.name}")
         else:
-            log.info(f"Using provided hardware specs: {self._accelerator_specs.name}")
+            log.info(f"Using provided hardware specs: {self._accelerator_spec.name}")
 
         return True
 
@@ -189,7 +189,7 @@ class ComposableKernelEngine(ComputeEngine):
             ]
 
             # Create result set with the profile results
-            result_set = ProfileResultSet(profile_results, self.accelerator_specs)
+            result_set = ProfileResultSet(profile_results, self.accelerator_spec)
 
             # Set engine and hardware info
             result_set.engine_name = "ComposableKernel"
@@ -216,7 +216,7 @@ class ComposableKernelEngine(ComputeEngine):
         cls,
         engine_type: Union[EngineType, str],
         config: Optional[ProfileConfig] = None,
-        accelerator_specs: Optional[AcceleratorSpec] = None,
+        accelerator_spec: Optional[AcceleratorSpec] = None,
     ) -> "ComputeEngine":
         """
         Factory method for creating ComposableKernelEngine instances.
@@ -224,7 +224,7 @@ class ComposableKernelEngine(ComputeEngine):
         Args:
             engine_type: Type of engine to create
             config: Optional configuration for the engine
-            accelerator_specs: Optional hardware specifications for the accelerator
+            accelerator_spec: Optional hardware specifications for the accelerator
 
         Returns:
             ComputeEngine instance
@@ -255,7 +255,7 @@ class ComposableKernelEngine(ComputeEngine):
             )
 
         # Create and return instance
-        return cls(config, accelerator_specs)
+        return cls(config, accelerator_spec)
 
     def get_available_kernels(self) -> List[Dict[str, Any]]:
         """
@@ -522,17 +522,19 @@ class ComposableKernelEngine(ComputeEngine):
             compute_rate=compute_rate,
         )
 
-        # Extract operation name/description
-        operation = profile_data.get("operation", kernel_spec.name or "unnamed")
-
-        # Create profile result
         result = ProfileResult(
             kernel_spec=kernel_spec,
             metrics=metrics,
-            operation=operation,
+            operation_params=kernel_spec.operation_params,
             raw_data=profile_data,
         )
 
+        # TODO: ckProfiler profiles the kernels that are compatible with
+        # the specified problem size and data type. It then selects the best kernel and reruns that kernel with more warmups and iterations.
+        # The result of the rerun is included in the profile data and marked as best.
+        # We cannot expect this behavior from all profilers. The most robust solution is to use a heuristic approach to select the best kernel based on the specified criteria.
+
+        # kernel based on the specified criteria.
         # Set is_best if available in the profile data
         if "is_best" in profile_data:
             result.is_best = bool(profile_data["is_best"])

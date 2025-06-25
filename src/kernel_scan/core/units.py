@@ -76,7 +76,21 @@ class Unit(ABC):
     @property
     def symbol(self) -> str:
         """Get the symbol for this unit, including prefix."""
-        return f"{self.base_symbol}"
+        prefix_symbols = {
+            Prefix.PICO: "p",
+            Prefix.NANO: "n",
+            Prefix.MICRO: "μ",
+            Prefix.MILLI: "m",
+            Prefix.NONE: "",
+            Prefix.KILO: "k",
+            Prefix.MEGA: "M",
+            Prefix.GIGA: "G",
+            Prefix.TERA: "T",
+            Prefix.PETA: "P",
+            Prefix.EXA: "E",
+        }
+        prefix_symbol = prefix_symbols.get(self.prefix, "")
+        return f"{prefix_symbol}{self.base_symbol}"
 
     def to(
         self, target_unit_class: Type["Unit"], prefix: Prefix = Prefix.NONE
