@@ -120,18 +120,20 @@ class Profiler:
         # Profile the kernel
 
         log.info(f"profile_with_engine() passes kernel spec: {self._kernel_spec}")
-        result = engine.profile(
+        engine_result_set = engine.profile(
             self.kernel_spec, self.accelerator_spec, output_file=output_file
         )
 
-        # Create a new ProfileResultSet with the result and kernel_spec
-        result_set = ProfileResultSet(
-            results=[result],
-            accelerator_spec=self._accelerator_spec,
-            kernel_spec=self._kernel_spec,
-        )
+        engine_result_set.engine_name = engine.name
 
-        result_set.engine_name = engine.name
+        # Create a new ProfileResultSet with the result and kernel_spec
+        # result_set = ProfileResultSet(
+        #     results=[result],
+        #     accelerator_spec=self._accelerator_spec,
+        #     kernel_spec=self._kernel_spec,
+        # )
+
+        self._result_set = engine_result_set
 
         return self._result_set
 

@@ -194,15 +194,6 @@ class ProfileResultSet:
         if not self._results:
             return
 
-        print("^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^")
-        print()
-        print(self.accelerator_spec)
-        print()
-        print()
-        print(self.kernel_spec)
-        print()
-        print("^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^'^")
-
         # Group results by operation type and data type
         grouped_results = {}
         for result in self._results:

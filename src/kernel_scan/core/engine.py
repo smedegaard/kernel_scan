@@ -138,7 +138,7 @@ class ComputeEngine(abc.ABC):
             accelerator_spec: The accelerator specification to profile
 
         Returns:
-            ProfileResult containing the profiling results
+            ProfileResultSet containing the profiling results
 
         Raises:
             ValueError: If the kernel specification is not supported

@@ -75,13 +75,15 @@ def main():
 
     log.info("Profiling with ComposableKernelEngine...")
     try:
-        _result_set = profiler.profile_with_engine(
+        result_set = profiler.profile_with_engine(
             EngineType.COMPOSABLE_KERNEL,
             warmup_iterations=2,
             output_file=Path("./results/quickstart.jsonl"),
         )
 
-        for result in _result_set.results:
+        log.info("RESULT SET")
+        log.info(result_set)
+        for result in result_set.results:
             log.info(f"Result: {result}")
     except Exception as e:
         log.error(f"Error during profiling: {e}")
