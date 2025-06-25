@@ -7,7 +7,7 @@ analysis, including FLOPS, bytes, and seconds. It supports SI prefixes
 and automatic unit conversion.
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, ClassVar, Optional, Type, Union
@@ -112,22 +112,9 @@ class Unit(ABC):
 
         # Convert to the base value of the target unit
         base_val = self._convert_to_base_value(target_unit_class)
-        scaled_val = base_val / prefix.factor
-
-        # Use convenience class if available
-        convenience_instance = self._create_convenience_instance(
-            target_unit_class, prefix, scaled_val
-        )
-        if convenience_instance:
-            return convenience_instance
-
-        # Check if target class is a convenience class with fixed prefix
-        if target_unit_class.__init__ != Unit.__init__:
-            # For classes like Microsecond that have their own __init__ with fixed prefix
-            return target_unit_class(scaled_val)
-        else:
-            # For standard unit classes that accept a prefix parameter
-            return target_unit_class(scaled_val, prefix)
+        scaled_val = base_val / target_unit_class._prefix.value
+        target = target_unit_class(scaled_val)
+        return target
 
     def with_prefix(self, prefix: Prefix) -> "Unit":
         """
@@ -153,6 +140,8 @@ class Unit(ABC):
     ) -> Optional["Unit"]:
         """Create a convenience class instance if one exists for the given unit class and prefix."""
         convenience_map = {
+            (Second, Prefix.MICRO): MicroSecond,
+            (Second, Prefix.MILLI): MilliSecond,
             (Flops, Prefix.MEGA): MegaFlops,
             (Flops, Prefix.GIGA): GigaFlops,
             (Flops, Prefix.TERA): TeraFlops,
@@ -181,6 +170,8 @@ class Unit(ABC):
             TeraByte: Byte,
             GigaBytesPerSecond: BytesPerSecond,
             TeraBytePerSecond: BytesPerSecond,
+            MilliSecond: Second,
+            MicroSecond: Second,
         }
         return base_class_map.get(self.__class__, self.__class__)
 
@@ -314,10 +305,18 @@ class Unit(ABC):
             else:
                 return self.__class__(self.value / other.value, self.prefix)
 
-    @abstractmethod
     def _convert_to_base_value(self, target_unit_class: Type["Unit"]) -> float:
         """Convert the base value to the target unit's base value."""
-        pass
+        # By default, if dimensions match, the base value stays the same
+        if self.dimension == target_unit_class.dimension:
+            return self.base_value
+
+        # For cross-dimension conversions, subclasses should override this method
+        # to provide specific conversion logic
+        raise ValueError(
+            f"Cannot convert from {self.__class__.__name__} ({self.dimension.name}) "
+            f"to {target_unit_class.__name__} ({target_unit_class.dimension.name})"
+        )
 
     def with_prefix(self, prefix: Prefix) -> "Unit":
         """
@@ -457,15 +456,19 @@ class Second(Unit):
         return self.base_value
 
 
-class Millisecond(Second):
+class MilliSecond(Second):
     """Represents milliseconds (convenience class)."""
+
+    _prefix = Prefix.MILLI
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.MILLI)
 
 
-class Microsecond(Second):
+class MicroSecond(Second):
     """Represents microseconds (convenience class)."""
+
+    _prefix = Prefix.MICRO
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.MICRO)
@@ -502,12 +505,16 @@ class Byte(Unit):
 class KiloByte(Byte):
     """Represents kilobytes (convenience class)."""
 
+    _prefix = Prefix.KILO
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.KILO)
 
 
 class MegaByte(Byte):
     """Represents megabytes (convenience class)."""
+
+    _prefix = Prefix.MEGA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.MEGA)
@@ -516,12 +523,16 @@ class MegaByte(Byte):
 class GigaByte(Byte):
     """Represents gigabytes (convenience class)."""
 
+    _prefix = Prefix.GIGA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.GIGA)
 
 
 class TeraByte(Byte):
     """Represents terabytes (convenience class)."""
+
+    _prefix = Prefix.TERA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.TERA)
@@ -554,12 +565,16 @@ class Flops(Unit):
 class MegaFlops(Flops):
     """Represents megaFLOPS (convenience class)."""
 
+    _prefix = Prefix.MEGA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.MEGA)
 
 
 class GigaFlops(Flops):
     """Represents gigaFLOPS (convenience class)."""
+
+    _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.GIGA)
@@ -568,12 +583,16 @@ class GigaFlops(Flops):
 class TeraFlops(Flops):
     """Represents teraFLOPS (convenience class)."""
 
+    _prefix = Prefix.TERA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.TERA)
 
 
 class PetaFlops(Flops):
     """Represents petaFLOPS (convenience class)."""
+
+    _prefix = Prefix.PETA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.PETA)
@@ -610,12 +629,16 @@ class BitsPerSecond(Unit):
 class GigaBytesPerSecond(BytesPerSecond):
     """Represents gigabytes per second (convenience class)."""
 
+    _prefix = Prefix.GIGA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.GIGA)
 
 
 class TeraBytePerSecond(BytesPerSecond):
     """Represents terabytes per second (convenience class)."""
+
+    _prefix = Prefix.TERA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.TERA)
@@ -679,12 +702,16 @@ class Iops(Unit):
 class MegaIops(Iops):
     """Represents megaIOPS (convenience class)."""
 
+    _prefix = Prefix.MEGA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.MEGA)
 
 
 class GigaIops(Iops):
     """Represents gigaIOPS (convenience class)."""
+
+    _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.GIGA)
@@ -693,12 +720,16 @@ class GigaIops(Iops):
 class TeraIops(Iops):
     """Represents teraIOPS (convenience class)."""
 
+    _prefix = Prefix.TERA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.TERA)
 
 
 class PetaIops(Iops):
     """Represents petaIOPS (convenience class)."""
+
+    _prefix = Prefix.PETA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.PETA)
@@ -765,12 +796,16 @@ class Ops(Unit):
 class MegaOps(Ops):
     """Represents megaOPS (convenience class)."""
 
+    _prefix = Prefix.MEGA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.MEGA)
 
 
 class GigaOps(Ops):
     """Represents gigaOPS (convenience class)."""
+
+    _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.GIGA)
@@ -779,12 +814,16 @@ class GigaOps(Ops):
 class TeraOps(Ops):
     """Represents teraOPS (convenience class)."""
 
+    _prefix = Prefix.TERA
+
     def __init__(self, value: float):
         super().__init__(value, Prefix.TERA)
 
 
 class PetaOps(Ops):
     """Represents petaOPS (convenience class)."""
+
+    _prefix = Prefix.PETA
 
     def __init__(self, value: float):
         super().__init__(value, Prefix.PETA)
