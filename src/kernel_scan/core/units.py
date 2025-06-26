@@ -139,41 +139,54 @@ class Unit(ABC):
         self, unit_class: Type["Unit"], prefix: Prefix, value: float
     ) -> Optional["Unit"]:
         """Create a convenience class instance if one exists for the given unit class and prefix."""
-        convenience_map = {
-            (Second, Prefix.MICRO): MicroSecond,
-            (Second, Prefix.MILLI): MilliSecond,
-            (Flops, Prefix.MEGA): MegaFlops,
-            (Flops, Prefix.GIGA): GigaFlops,
-            (Flops, Prefix.TERA): TeraFlops,
-            (Flops, Prefix.PETA): PetaFlops,
-            (Byte, Prefix.KILO): KiloByte,
-            (Byte, Prefix.MEGA): MegaByte,
-            (Byte, Prefix.GIGA): GigaByte,
-            (Byte, Prefix.TERA): TeraByte,
-            (BytesPerSecond, Prefix.GIGA): GigaBytesPerSecond,
-            (BytesPerSecond, Prefix.TERA): TeraBytePerSecond,
-        }
+        # Find all Unit subclasses that have the _prefix attribute
+        convenience_classes = [
+            cls
+            for cls in globals().values()
+            if isinstance(cls, type)
+            and issubclass(cls, Unit)
+            and cls != Unit
+            and hasattr(cls, "_prefix")
+            and cls._prefix == prefix
+        ]
 
-        convenience_class = convenience_map.get((unit_class, prefix))
-        return convenience_class(value) if convenience_class else None
+        # Check which ones have the specified base class
+        for cls in convenience_classes:
+            if unit_class in cls.__mro__:
+                return cls(value)
+
+        return None
 
     def _get_base_class(self) -> Type["Unit"]:
         """Get the base class for this unit."""
-        base_class_map = {
-            MegaFlops: Flops,
-            GigaFlops: Flops,
-            TeraFlops: Flops,
-            PetaFlops: Flops,
-            KiloByte: Byte,
-            MegaByte: Byte,
-            GigaByte: Byte,
-            TeraByte: Byte,
-            GigaBytesPerSecond: BytesPerSecond,
-            TeraBytePerSecond: BytesPerSecond,
-            MilliSecond: Second,
-            MicroSecond: Second,
-        }
-        return base_class_map.get(self.__class__, self.__class__)
+        # For convenience classes, we want the first non-convenience base class
+        for base in self.__class__.__mro__:
+            if base != self.__class__ and base != Unit and issubclass(base, Unit):
+                # Found a base class that is a Unit but not the convenience class itself
+                if base.__init__ == Unit.__init__:
+                    # This is a base class with the standard Unit.__init__
+                    return base
+
+        # If no suitable base class is found, return the class itself
+        return self.__class__
+
+    # def _get_base_class(self) -> Type["Unit"]:
+    #     """Get the base class for this unit."""
+    #     base_class_map = {
+    #         MegaFlops: Flops,
+    #         GigaFlops: Flops,
+    #         TeraFlops: Flops,
+    #         PetaFlops: Flops,
+    #         KiloByte: Byte,
+    #         MegaByte: Byte,
+    #         GigaByte: Byte,
+    #         TeraByte: Byte,
+    #         GigaBytesPerSecond: BytesPerSecond,
+    #         TeraBytePerSecond: BytesPerSecond,
+    #         MilliSecond: Second,
+    #         MicroSecond: Second,
+    #     }
+    #     return base_class_map.get(self.__class__, self.__class__)
 
     def _is_compatible_with(self, target_unit_class: Type["Unit"]) -> bool:
         """Check if this unit can be converted to the target unit."""
@@ -318,47 +331,6 @@ class Unit(ABC):
             f"to {target_unit_class.__name__} ({target_unit_class.dimension.name})"
         )
 
-    def with_prefix(self, prefix: Prefix) -> "Unit":
-        """
-        Create a new instance with the same value but a different prefix.
-
-        Args:
-            prefix: The new prefix to use
-
-        Returns:
-            A new unit instance with the adjusted value
-        """
-        base_val = self.base_value
-
-        # Special handling for unit classes with prefix-specific subclasses
-        if isinstance(self, Flops):
-            if prefix == Prefix.MEGA:
-                return MegaFlops(base_val / Prefix.MEGA.factor)
-            elif prefix == Prefix.GIGA:
-                return GigaFlops(base_val / Prefix.GIGA.factor)
-            elif prefix == Prefix.TERA:
-                return TeraFlops(base_val / Prefix.TERA.factor)
-            elif prefix == Prefix.PETA:
-                return PetaFlops(base_val / Prefix.PETA.factor)
-        elif isinstance(self, Byte):
-            if prefix == Prefix.KILO:
-                return KiloByte(base_val / Prefix.KILO.factor)
-            elif prefix == Prefix.MEGA:
-                return MegaByte(base_val / Prefix.MEGA.factor)
-            elif prefix == Prefix.GIGA:
-                return GigaByte(base_val / Prefix.GIGA.factor)
-            elif prefix == Prefix.TERA:
-                return TeraByte(base_val / Prefix.TERA.factor)
-        elif isinstance(self, BytesPerSecond):
-            if prefix == Prefix.GIGA:
-                return GigaBytesPerSecond(base_val / Prefix.GIGA.factor)
-            elif prefix == Prefix.TERA:
-                return TeraBytePerSecond(base_val / Prefix.TERA.factor)
-
-        # For other cases, use the standard approach
-        new_val = base_val / prefix.factor
-        return self.__class__(new_val, prefix)
-
     def to_pico(self) -> "Unit":
         """Convert to pico prefix."""
         return self.with_prefix(Prefix.PICO)
@@ -450,6 +422,7 @@ class Second(Unit):
     dimension = Dimension("time")
     base_name = "second"
     base_symbol = "s"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert seconds to the target unit's base value."""
@@ -462,7 +435,7 @@ class MilliSecond(Second):
     _prefix = Prefix.MILLI
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.MILLI)
+        super().__init__(value, self._prefix)
 
 
 class MicroSecond(Second):
@@ -471,7 +444,7 @@ class MicroSecond(Second):
     _prefix = Prefix.MICRO
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.MICRO)
+        super().__init__(value, self._prefix)
 
 
 class Bit(Unit):
@@ -480,6 +453,7 @@ class Bit(Unit):
     dimension = Dimension("memory")
     base_name = "bit"
     base_symbol = "bit"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert bits to the target unit's base value."""
@@ -494,6 +468,7 @@ class Byte(Unit):
     dimension = Dimension("memory")
     base_name = "byte"
     base_symbol = "B"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert bytes to the target unit's base value."""
@@ -508,7 +483,7 @@ class KiloByte(Byte):
     _prefix = Prefix.KILO
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.KILO)
+        super().__init__(value, self._prefix)
 
 
 class MegaByte(Byte):
@@ -517,7 +492,7 @@ class MegaByte(Byte):
     _prefix = Prefix.MEGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.MEGA)
+        super().__init__(value, self._prefix)
 
 
 class GigaByte(Byte):
@@ -526,7 +501,7 @@ class GigaByte(Byte):
     _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.GIGA)
+        super().__init__(value, self._prefix)
 
 
 class TeraByte(Byte):
@@ -535,7 +510,7 @@ class TeraByte(Byte):
     _prefix = Prefix.TERA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.TERA)
+        super().__init__(value, self._prefix)
 
 
 class Flop(Unit):
@@ -544,6 +519,7 @@ class Flop(Unit):
     dimension = Dimension("compute")
     base_name = "flop"
     base_symbol = "FLOP"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert FLOPs to the target unit's base value."""
@@ -556,6 +532,7 @@ class Flops(Unit):
     dimension = Dimension("compute_rate")
     base_name = "flops"
     base_symbol = "FLOPS"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert FLOPS to the target unit's base value."""
@@ -568,7 +545,7 @@ class MegaFlops(Flops):
     _prefix = Prefix.MEGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.MEGA)
+        super().__init__(value, self._prefix)
 
 
 class GigaFlops(Flops):
@@ -577,7 +554,7 @@ class GigaFlops(Flops):
     _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.GIGA)
+        super().__init__(value, self._prefix)
 
 
 class TeraFlops(Flops):
@@ -586,7 +563,7 @@ class TeraFlops(Flops):
     _prefix = Prefix.TERA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.TERA)
+        super().__init__(value, self._prefix)
 
 
 class PetaFlops(Flops):
@@ -595,7 +572,7 @@ class PetaFlops(Flops):
     _prefix = Prefix.PETA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.PETA)
+        super().__init__(value, self._prefix)
 
 
 class BytesPerSecond(Unit):
@@ -604,6 +581,7 @@ class BytesPerSecond(Unit):
     dimension = Dimension("bandwidth")
     base_name = "bytes per second"
     base_symbol = "B/s"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert bytes per second to the target unit's base value."""
@@ -618,6 +596,7 @@ class BitsPerSecond(Unit):
     dimension = Dimension("bandwidth")
     base_name = "bits per second"
     base_symbol = "bit/s"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert bits per second to the target unit's base value."""
@@ -632,7 +611,7 @@ class GigaBytesPerSecond(BytesPerSecond):
     _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.GIGA)
+        super().__init__(value, self._prefix)
 
 
 class TeraBytePerSecond(BytesPerSecond):
@@ -641,7 +620,7 @@ class TeraBytePerSecond(BytesPerSecond):
     _prefix = Prefix.TERA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.TERA)
+        super().__init__(value, self._prefix)
 
 
 class FlopsPerByte(Unit):
@@ -650,6 +629,7 @@ class FlopsPerByte(Unit):
     dimension = Dimension("arithmetic_intensity")
     base_name = "flops per byte"
     base_symbol = "FLOPS/B"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert FLOPS per byte to the target unit's base value."""
@@ -664,6 +644,7 @@ class FlopsPerBit(Unit):
     dimension = Dimension("arithmetic_intensity")
     base_name = "flops per bit"
     base_symbol = "FLOPS/bit"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert FLOPS per bit to the target unit's base value."""
@@ -681,6 +662,7 @@ class Iop(Unit):
     dimension = Dimension("compute")
     base_name = "iop"
     base_symbol = "IOP"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert IOPs to the target unit's base value."""
@@ -693,6 +675,7 @@ class Iops(Unit):
     dimension = Dimension("compute_rate")
     base_name = "iops"
     base_symbol = "IOPS"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert IOPS to the target unit's base value."""
@@ -705,7 +688,7 @@ class MegaIops(Iops):
     _prefix = Prefix.MEGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.MEGA)
+        super().__init__(value, self._prefix)
 
 
 class GigaIops(Iops):
@@ -714,7 +697,7 @@ class GigaIops(Iops):
     _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.GIGA)
+        super().__init__(value, self._prefix)
 
 
 class TeraIops(Iops):
@@ -723,7 +706,7 @@ class TeraIops(Iops):
     _prefix = Prefix.TERA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.TERA)
+        super().__init__(value, self._prefix)
 
 
 class PetaIops(Iops):
@@ -732,7 +715,7 @@ class PetaIops(Iops):
     _prefix = Prefix.PETA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.PETA)
+        super().__init__(value, self._prefix)
 
 
 # ARITHMETIC INTENSITY CLASSES FOR INTEGER OPERATIONS
@@ -744,6 +727,7 @@ class IopsPerByte(Unit):
     dimension = Dimension("arithmetic_intensity")
     base_name = "iops per byte"
     base_symbol = "IOPS/B"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert IOPS per byte to the target unit's base value."""
@@ -758,6 +742,7 @@ class IopsPerBit(Unit):
     dimension = Dimension("arithmetic_intensity")
     base_name = "iops per bit"
     base_symbol = "IOPS/bit"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert IOPS per bit to the target unit's base value."""
@@ -775,6 +760,7 @@ class Op(Unit):
     dimension = Dimension("compute")
     base_name = "op"
     base_symbol = "OP"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert operations to the target unit's base value."""
@@ -787,6 +773,7 @@ class Ops(Unit):
     dimension = Dimension("compute_rate")
     base_name = "ops"
     base_symbol = "OPS"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert OPS to the target unit's base value."""
@@ -799,7 +786,7 @@ class MegaOps(Ops):
     _prefix = Prefix.MEGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.MEGA)
+        super().__init__(value, self._prefix)
 
 
 class GigaOps(Ops):
@@ -808,7 +795,7 @@ class GigaOps(Ops):
     _prefix = Prefix.GIGA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.GIGA)
+        super().__init__(value, self._prefix)
 
 
 class TeraOps(Ops):
@@ -817,7 +804,7 @@ class TeraOps(Ops):
     _prefix = Prefix.TERA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.TERA)
+        super().__init__(value, self._prefix)
 
 
 class PetaOps(Ops):
@@ -826,7 +813,7 @@ class PetaOps(Ops):
     _prefix = Prefix.PETA
 
     def __init__(self, value: float):
-        super().__init__(value, Prefix.PETA)
+        super().__init__(value, self._prefix)
 
 
 # ARITHMETIC INTENSITY CLASSES FOR GENERIC OPERATIONS
@@ -838,6 +825,7 @@ class OpsPerByte(Unit):
     dimension = Dimension("arithmetic_intensity")
     base_name = "operations per byte"
     base_symbol = "OPS/B"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert operations per byte to the target unit's base value."""
@@ -856,6 +844,7 @@ class OpsPerBit(Unit):
     dimension = Dimension("arithmetic_intensity")
     base_name = "operations per bit"
     base_symbol = "OPS/bit"
+    _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert operations per bit to the target unit's base value."""
@@ -866,3 +855,33 @@ class OpsPerBit(Unit):
         elif target_unit_class == IopsPerBit:
             return self.base_value  # Assuming 1:1 conversion
         return self.base_value
+
+
+CONVENIENCE_CLASSES = {
+    # Time units
+    MicroSecond: Second,
+    MilliSecond: Second,
+    # Storage units
+    KiloByte: Byte,
+    MegaByte: Byte,
+    GigaByte: Byte,
+    TeraByte: Byte,
+    # Computing performance units
+    MegaFlops: Flops,
+    GigaFlops: Flops,
+    TeraFlops: Flops,
+    PetaFlops: Flops,
+    # Bandwidth units
+    GigaBytesPerSecond: BytesPerSecond,
+    TeraBytePerSecond: BytesPerSecond,
+    # I/O operations units
+    MegaIops: Iops,
+    GigaIops: Iops,
+    TeraIops: Iops,
+    PetaIops: Iops,
+    # General operations units
+    MegaOps: Ops,
+    GigaOps: Ops,
+    TeraOps: Ops,
+    PetaOps: Ops,
+}

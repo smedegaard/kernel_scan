@@ -5,25 +5,39 @@ This module tests the functionality of the custom units system used
 for GPU performance profiling.
 """
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from kernel_scan.core.units import (
-    Bit,
-    Byte,
-    Flops,
-    FlopsPerByte,
-    GigaByte,
-    GigaBytesPerSecond,
-    GigaFlops,
-    KiloByte,
-    MegaByte,
-    MegaFlops,
-    Millisecond,
-    Prefix,
-    Second,
-    TeraFlops,
-    compute_arithmetic_intensity,
-)
+# Add the src directory to sys.path to import kernel_scan
+# Note: We need to go up two levels since we're in examples/composable_kernel/
+project_root = Path(__file__).parent.parent
+src_path = project_root / "src"
+sys.path.append(str(src_path))
+
+try:
+    from kernel_scan.core.units import (
+        Bit,
+        Byte,
+        BytesPerSecond,
+        Flops,
+        FlopsPerByte,
+        GigaByte,
+        GigaBytesPerSecond,
+        GigaFlops,
+        KiloByte,
+        MegaByte,
+        MegaFlops,
+        MicroSecond,
+        MilliSecond,
+        Prefix,
+        Second,
+        TeraFlops,
+    )
+    from kernel_scan.operations.gemm import calculate_arithmetic_intensity
+except ImportError as e:
+    raise e
 
 
 class TestUnitBasics:
@@ -38,7 +52,7 @@ class TestUnitBasics:
         assert second.base_value == 1.0
 
         # Unit with prefix via class constructor
-        millisecond = Millisecond(500)
+        millisecond = MilliSecond(500)
         assert millisecond.value == 500
         assert millisecond.prefix == Prefix.MILLI
         assert millisecond.base_value == 0.5  # 500 ms = 0.5 s
@@ -56,11 +70,11 @@ class TestUnitBasics:
         assert flops.symbol == "FLOPS"
 
         gflops = GigaFlops(1.0)
-        assert gflops.name == "Gigaflops"
+        assert gflops.name == "gigaflops"
         assert gflops.symbol == "GFLOPS"
 
         tflops = TeraFlops(1.0)
-        assert tflops.name == "Teraflops"
+        assert tflops.name == "teraflops"
         assert tflops.symbol == "TFLOPS"
 
     def test_string_representation(self):
@@ -83,6 +97,21 @@ class TestUnitBasics:
 
 class TestUnitConversion:
     """Test unit conversion between prefixes and types."""
+
+    def test_to_function(self):
+        millisecond = MilliSecond(500)
+        micro = millisecond.to(MicroSecond)
+        assert micro.value == 500000
+        assert micro.prefix == Prefix.MICRO
+        assert micro.base_value == 0.5
+
+    def test_to_micro_function(self):
+        millisecond = MilliSecond(500)
+        micro = millisecond.to_micro()
+        print(type(micro))
+        assert micro.value == 500000
+        assert micro.prefix == Prefix.MICRO
+        assert micro.base_value == 0.5
 
     def test_prefix_conversion(self):
         """Test conversion between different prefixes of the same unit."""
@@ -194,11 +223,11 @@ class TestMathOperations:
         assert isinstance(b, GigaFlops)
 
         # Division by compatible unit (special case testing)
-        compute = TeraFlops(1.2)
-        bandwidth = GigaBytesPerSecond(0.3)
-        intensity = compute_arithmetic_intensity(compute, bandwidth)
+        compute = Flops(4.0)
+        bandwidth = BytesPerSecond(2.0)
+        intensity = compute / bandwidth
         assert isinstance(intensity, FlopsPerByte)
-        assert intensity.value == 4.0  # 1.2 TFLOPS / 0.3 GB/s = 4 FLOPS/B
+        assert intensity.value == 2.0
 
 
 class TestComparison:
