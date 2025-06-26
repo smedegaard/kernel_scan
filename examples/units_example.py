@@ -27,7 +27,7 @@ try:
         GigaByte,
         GigaBytesPerSecond,
         GigaFlops,
-        Millisecond,
+        MilliSecond,
         # Enum for prefix constants
         Prefix,
         TeraFlops,
@@ -70,7 +70,7 @@ def main():
     memory = GigaByte(16.0)
 
     # Create time units
-    time = Millisecond(3.5)
+    time = MilliSecond(3.5)
 
     # Display the units
     log.info(f"Compute Performance: {tflops}")

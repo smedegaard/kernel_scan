@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional, Union
 
 from kernel_scan.api.operations.gemm import (
     GemmInputs,
-    GemmOperationParams,
     GemmOutputs,
     GemmParams,
 )
@@ -31,8 +30,8 @@ from kernel_scan.core.types import (
 from kernel_scan.core.units import (
     GigaBytesPerSecond,
     GigaFlops,
-    Microsecond,
-    Millisecond,
+    MicroSecond,
+    MilliSecond,
     TeraFlops,
 )
 
@@ -106,7 +105,7 @@ class ComposableKernelEngine(ComputeEngine):
 
         # Get GEMM parameters
         gemm_params = kernel_spec.operation_params
-        if not isinstance(gemm_params, GemmOperationParams):
+        if not isinstance(gemm_params, GemmParams):
             return False
 
         return True
@@ -145,10 +144,10 @@ class ComposableKernelEngine(ComputeEngine):
 
         # Get GEMM parameters
         gemm_params = kernel_spec.operation_params
-        if not isinstance(gemm_params, GemmOperationParams):
+        if not isinstance(gemm_params, GemmParams):
             raise ValueError(f"Invalid operation parameters: {gemm_params}")
 
-        params = gemm_params.params
+        params = gemm_params
 
         # Use provided output file or create a temporary one
         temp_file_created = False
@@ -499,8 +498,8 @@ class ComposableKernelEngine(ComputeEngine):
         """
         # Extract metrics and convert to appropriate unit types
         # For latency: convert milliseconds to microseconds
-        time_ms = float(profile_data.get("time_ms", 0.0))
-        latency = Millisecond(time_ms).to(Microsecond)
+        time_ms = float(profile_data.get("time_ms"))
+        latency = MilliSecond(time_ms).to(MicroSecond)
 
         # For compute rate: convert TeraFLOPS to GigaFlops
         tflops_value = float(profile_data.get("tflops", 0.0))
@@ -650,7 +649,7 @@ class CkProfilerScanner:
                     kernel_spec = KernelSpec(
                         operation_type=OperationType.GEMM,
                         data_type=data_type,
-                        operation_params=GemmOperationParams(gemm_params),
+                        operation_params=GemmParams(gemm_params),
                         inputs=inputs,
                         outputs=outputs,
                         iterations=iterations,
