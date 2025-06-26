@@ -53,7 +53,6 @@ class OperationPlotter(ABC):
         cls,
         df: "pl.DataFrame",
         title: str,
-        color_by: Optional[str] = None,
         size_column: str = "latency_value",
         hover_data: Optional[Dict[str, bool]] = None,
     ) -> "go.Figure":
@@ -83,20 +82,13 @@ class OperationPlotter(ABC):
                     "arithmetic_intensity_value": f"Arithmetic Intensity ({df['arithmetic_intensity_unit'].first()})",
                     "compute_performance_value": f"Compute Performance ({df['compute_performance_unit'].first()})",
                     "latency_value": f"Execution Time ({df['latency_unit'].first()})",
+                    "latency_scaled": False,
                 },
                 "title": title,
                 "height": 600,
                 "hover_data": {},
+                "color": "group",
             }
-
-            # Add color parameter if provided
-            if color_by:
-                # Cast the color column to string to ensure proper categorical coloring
-                df = df.with_columns(
-                    pl.col(color_by).cast(pl.String).alias(f"{color_by}_str")
-                )
-                scatter_params["color"] = f"{color_by}_str"
-                scatter_params["hover_data"][f"{color_by}_str"] = False
 
             # Add hover data if provided
             if hover_data:
@@ -283,28 +275,67 @@ class OperationPlotter(ABC):
                     (pl.col("latency_value").sqrt().alias("latency_scaled"))
                 )
 
-                # Get the first result_id for this group to retrieve metadata
+                # Get hardware and data type information (should be consistent within a group)
                 result_id = combined_df["result_id"].first()
                 metadata = metadata_map[result_id]
-
-                operation_params = metadata["operation_params"]
                 data_type = metadata["data_type"]
                 hardware_name = metadata["hardware_name"]
 
-                # Create title with metadata information
+                # Get unique values for operation parameters using metadata
+                unique_values = {}
+                for result_id in combined_df["result_id"].unique().to_list():
+                    params = metadata_map[result_id]["operation_params"]
+                    # Iterate through all attributes in operation_params
+                    for param_name in vars(params):
+                        param_value = getattr(params, param_name)
+                        if param_name not in unique_values:
+                            unique_values[param_name] = []
+                        if param_value not in unique_values[param_name]:
+                            unique_values[param_name].append(param_value)
+
+                # Sort all parameter values
+                for param in unique_values:
+                    unique_values[param].sort()
+
+                log.info(f"Unique values for operation parameters: {unique_values}")
+
+                # Prepare parameter strings for the title
+                param_strings = {}
+                for param, values in unique_values.items():
+                    if len(values) == 1:
+                        param_strings[param] = f"{param}: {values[0]}"
+                    else:
+                        # If there are too many values, summarize
+                        if len(values) > 3:
+                            param_strings[param] = (
+                                f"{param}: [{min(values)}-{max(values)}]"
+                            )
+                        else:
+                            param_strings[param] = (
+                                f"{param}: [{', '.join(map(str, values))}]"
+                            )
+
+                # Create title with dynamic parameter information using unique_values
                 title = (
                     f"Roofline Analysis: {group_by} = {group}\n"
                     f"{hardware_name} - {data_type.name} ({cls.get_operation_type().name})\n"
-                    f"m: {operation_params.m}, n: {operation_params.n},  k: {operation_params.k}"
                 )
+
+                # Build param_title using all parameters from unique_values instead of hardcoded list
+                param_title = ", ".join(
+                    [param_strings[param] for param in unique_values.keys()]
+                )
+                title += param_title
 
                 # Create figure using the helper method
                 fig = cls._create_roofline_figure(
                     combined_df,
                     title,
-                    color_by="latency_scaled",
                     size_column="latency_scaled",
-                    hover_data={"latency_value": True},
+                    hover_data={
+                        "latency_value": True,
+                        "latency_scaled": False,
+                    },
                 )
 
                 figures[group] = fig
