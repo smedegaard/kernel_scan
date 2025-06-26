@@ -41,7 +41,6 @@ from kernel_scan.core.logging import get_logger
 from kernel_scan.core.plots import OperationPlotter
 from kernel_scan.core.results import ProfileResultSet
 from kernel_scan.core.specs import (
-    AcceleratorSpec,
     KernelSpec,
     KernelSpecBuilder,
     TensorSpec,
@@ -55,6 +54,7 @@ from kernel_scan.core.types import (
     OperationParams,
     OperationType,
 )
+from kernel_scan.core.units import Byte, Flops, FlopsPerByte, GigaBytesPerSecond
 
 log = get_logger("gemm")
 
@@ -112,6 +112,136 @@ class GemmOutputs(OperationOutputs):
 
     def __init__(self, c: TensorSpec):
         self.c = c
+
+
+@dataclass
+class GemmKernelSpec(KernelSpec):
+    """
+    Kernel specification for GEMM (General Matrix Multiplication) operations.
+
+    Attributes:
+        gemm_params: GEMM-specific operation parameters
+        gemm_inputs: GEMM input tensors (matrices A and B)
+        gemm_outputs: GEMM output tensor (matrix C)
+    """
+
+    # Use Optional with None defaults to fix dataclass field ordering
+    gemm_params: Optional[GemmOperationParams] = None
+    gemm_inputs: Optional[GemmInputs] = None
+    gemm_outputs: Optional[GemmOutputs] = None
+
+    def __post_init__(self):
+        """Validate that required fields are provided."""
+        if self.gemm_params is None:
+            raise ValueError("gemm_params is required for GemmKernelSpec")
+        if self.gemm_inputs is None:
+            raise ValueError("gemm_inputs is required for GemmKernelSpec")
+        if self.gemm_outputs is None:
+            raise ValueError("gemm_outputs is required for GemmKernelSpec")
+
+    @property
+    def operation_type(self) -> OperationType:
+        """Return the operation type for GEMM."""
+        return OperationType.GEMM
+
+    @property
+    def operation_params(self) -> OperationParams:
+        """Return the GEMM operation parameters."""
+        return self.gemm_params.params
+
+    @operation_params.setter
+    def operation_params(self, value: OperationParams):
+        """Set the GEMM operation parameters."""
+        self.gemm_params = value
+
+    @property
+    def inputs(self) -> OperationInputs:
+        """Return the GEMM input specifications."""
+        return self.gemm_inputs
+
+    @property
+    def outputs(self) -> OperationOutputs:
+        """Return the GEMM output specifications."""
+        return self.gemm_outputs
+
+    def validate(self) -> bool:
+        """
+        Validate that the GEMM kernel specification is consistent.
+
+        Returns:
+            True if the specification is valid
+
+        Raises:
+            Various KernelSpecError subclasses if validation fails
+        """
+        # Extract parameters
+        params = self.gemm_params.params
+        a_spec = self.gemm_inputs.a
+        b_spec = self.gemm_inputs.b
+        c_spec = self.gemm_outputs.c
+
+        # Validate data types consistency
+        if a_spec.data_type != self.data_type:
+            raise IncompatibleDataTypesError(
+                f"Input A data type {a_spec.data_type} doesn't match kernel data type {self.data_type}"
+            )
+        if b_spec.data_type != self.data_type:
+            raise IncompatibleDataTypesError(
+                f"Input B data type {b_spec.data_type} doesn't match kernel data type {self.data_type}"
+            )
+        if c_spec.data_type != self.data_type:
+            raise IncompatibleDataTypesError(
+                f"Output C data type {c_spec.data_type} doesn't match kernel data type {self.data_type}"
+            )
+
+        # Validate tensor dimensions
+        if len(a_spec.dimensions) != 2:
+            raise InvalidTensorShapeError(
+                f"Matrix A must be 2D, got {len(a_spec.dimensions)}D"
+            )
+        if len(b_spec.dimensions) != 2:
+            raise InvalidTensorShapeError(
+                f"Matrix B must be 2D, got {len(b_spec.dimensions)}D"
+            )
+        if len(c_spec.dimensions) != 2:
+            raise InvalidTensorShapeError(
+                f"Matrix C must be 2D, got {len(c_spec.dimensions)}D"
+            )
+
+        # Get actual dimensions
+        a_rows, a_cols = a_spec.dimensions
+        b_rows, b_cols = b_spec.dimensions
+        c_rows, c_cols = c_spec.dimensions
+
+        # Validate dimension compatibility
+        if a_cols != b_rows:
+            raise IncompatibleDimensionsError(
+                f"Matrix multiplication dimension mismatch: A columns ({a_cols}) != B rows ({b_rows})"
+            )
+        if a_rows != c_rows:
+            raise IncompatibleDimensionsError(
+                f"Output dimension mismatch: A rows ({a_rows}) != C rows ({c_rows})"
+            )
+        if b_cols != c_cols:
+            raise IncompatibleDimensionsError(
+                f"Output dimension mismatch: B columns ({b_cols}) != C columns ({c_cols})"
+            )
+
+        # Validate against operation parameters
+        if params.m != c_rows:
+            raise OperationParameterMismatchError(
+                f"Parameter M ({params.m}) doesn't match output rows ({c_rows})"
+            )
+        if params.n != c_cols:
+            raise OperationParameterMismatchError(
+                f"Parameter N ({params.n}) doesn't match output columns ({c_cols})"
+            )
+        if params.k != a_cols:
+            raise OperationParameterMismatchError(
+                f"Parameter K ({params.k}) doesn't match inner dimension ({a_cols})"
+            )
+
+        return True
 
 
 class GemmKernelSpecBuilder(KernelSpecBuilder):
@@ -319,7 +449,7 @@ def validate_gemm_operation(
     return True
 
 
-def calculate_flops(params: GemmParams) -> int:
+def calculate_flops(params: GemmParams) -> Flops:
     """
     Calculate the number of floating-point operations for a GEMM operation.
 
@@ -345,10 +475,10 @@ def calculate_flops(params: GemmParams) -> int:
     if params.beta != 0.0:
         flops += params.m * params.n
 
-    return flops
+    return Flops(flops)
 
 
-def calculate_bytes_moved(params: GemmParams, dtype_size: int) -> int:
+def calculate_bytes_moved(params: GemmParams, dtype_size: int) -> Byte:
     """
     Calculate bytes moved for GEMM: C = alpha * A * B + beta * C.
 
@@ -371,10 +501,10 @@ def calculate_bytes_moved(params: GemmParams, dtype_size: int) -> int:
     # Read C only if beta != 0
     c_read_bytes = c_bytes if params.beta != 0.0 else 0
 
-    return a_bytes + b_bytes + c_read_bytes + c_bytes
+    return Byte(a_bytes + b_bytes + c_read_bytes + c_bytes)
 
 
-def calculate_arithmetic_intensity(params: GemmParams, dtype: DataType) -> float:
+def calculate_arithmetic_intensity(params: GemmParams, dtype: DataType) -> FlopsPerByte:
     """
     Calculate the arithmetic intensity (FLOPs per byte) for a GEMM operation.
 
@@ -392,7 +522,8 @@ def calculate_arithmetic_intensity(params: GemmParams, dtype: DataType) -> float
     dtype_size = DataType.get_size_bytes(dtype)
     bytes_moved = calculate_bytes_moved(params, dtype_size)
 
-    return flops / bytes_moved
+    flops_per_byte_value = flops.value / bytes_moved.value
+    return FlopsPerByte(flops_per_byte_value)
 
 
 def verify_gemm_result(
@@ -418,131 +549,6 @@ def verify_gemm_result(
         True if the result is correct within the tolerance
     """
     raise NotImplementedError("GEMM verification not implemented yet")
-
-
-@dataclass
-class GemmKernelSpec(KernelSpec):
-    """
-    Kernel specification for GEMM (General Matrix Multiplication) operations.
-
-    Attributes:
-        gemm_params: GEMM-specific operation parameters
-        gemm_inputs: GEMM input tensors (matrices A and B)
-        gemm_outputs: GEMM output tensor (matrix C)
-    """
-
-    # Use Optional with None defaults to fix dataclass field ordering
-    gemm_params: Optional[GemmOperationParams] = None
-    gemm_inputs: Optional[GemmInputs] = None
-    gemm_outputs: Optional[GemmOutputs] = None
-
-    def __post_init__(self):
-        """Validate that required fields are provided."""
-        if self.gemm_params is None:
-            raise ValueError("gemm_params is required for GemmKernelSpec")
-        if self.gemm_inputs is None:
-            raise ValueError("gemm_inputs is required for GemmKernelSpec")
-        if self.gemm_outputs is None:
-            raise ValueError("gemm_outputs is required for GemmKernelSpec")
-
-    @property
-    def operation_type(self) -> OperationType:
-        """Return the operation type for GEMM."""
-        return OperationType.GEMM
-
-    @property
-    def operation_params(self) -> OperationParams:
-        """Return the GEMM operation parameters."""
-        return self.gemm_params
-
-    @property
-    def inputs(self) -> OperationInputs:
-        """Return the GEMM input specifications."""
-        return self.gemm_inputs
-
-    @property
-    def outputs(self) -> OperationOutputs:
-        """Return the GEMM output specifications."""
-        return self.gemm_outputs
-
-    def validate(self) -> bool:
-        """
-        Validate that the GEMM kernel specification is consistent.
-
-        Returns:
-            True if the specification is valid
-
-        Raises:
-            Various KernelSpecError subclasses if validation fails
-        """
-        # Extract parameters
-        params = self.gemm_params.params
-        a_spec = self.gemm_inputs.a
-        b_spec = self.gemm_inputs.b
-        c_spec = self.gemm_outputs.c
-
-        # Validate data types consistency
-        if a_spec.data_type != self.data_type:
-            raise IncompatibleDataTypesError(
-                f"Input A data type {a_spec.data_type} doesn't match kernel data type {self.data_type}"
-            )
-        if b_spec.data_type != self.data_type:
-            raise IncompatibleDataTypesError(
-                f"Input B data type {b_spec.data_type} doesn't match kernel data type {self.data_type}"
-            )
-        if c_spec.data_type != self.data_type:
-            raise IncompatibleDataTypesError(
-                f"Output C data type {c_spec.data_type} doesn't match kernel data type {self.data_type}"
-            )
-
-        # Validate tensor dimensions
-        if len(a_spec.dimensions) != 2:
-            raise InvalidTensorShapeError(
-                f"Matrix A must be 2D, got {len(a_spec.dimensions)}D"
-            )
-        if len(b_spec.dimensions) != 2:
-            raise InvalidTensorShapeError(
-                f"Matrix B must be 2D, got {len(b_spec.dimensions)}D"
-            )
-        if len(c_spec.dimensions) != 2:
-            raise InvalidTensorShapeError(
-                f"Matrix C must be 2D, got {len(c_spec.dimensions)}D"
-            )
-
-        # Get actual dimensions
-        a_rows, a_cols = a_spec.dimensions
-        b_rows, b_cols = b_spec.dimensions
-        c_rows, c_cols = c_spec.dimensions
-
-        # Validate dimension compatibility
-        if a_cols != b_rows:
-            raise IncompatibleDimensionsError(
-                f"Matrix multiplication dimension mismatch: A columns ({a_cols}) != B rows ({b_rows})"
-            )
-        if a_rows != c_rows:
-            raise IncompatibleDimensionsError(
-                f"Output dimension mismatch: A rows ({a_rows}) != C rows ({c_rows})"
-            )
-        if b_cols != c_cols:
-            raise IncompatibleDimensionsError(
-                f"Output dimension mismatch: B columns ({b_cols}) != C columns ({c_cols})"
-            )
-
-        # Validate against operation parameters
-        if params.m != c_rows:
-            raise OperationParameterMismatchError(
-                f"Parameter M ({params.m}) doesn't match output rows ({c_rows})"
-            )
-        if params.n != c_cols:
-            raise OperationParameterMismatchError(
-                f"Parameter N ({params.n}) doesn't match output columns ({c_cols})"
-            )
-        if params.k != a_cols:
-            raise OperationParameterMismatchError(
-                f"Parameter K ({params.k}) doesn't match inner dimension ({a_cols})"
-            )
-
-        return True
 
 
 class GemmTestCase(NamedTuple):
@@ -597,7 +603,7 @@ class GemmScan:
         self.n_values: List[int] = []
         self.k_values: List[int] = []
         self.nk_linked: bool = False
-        self.iterations: int = 100
+        self._iterations: int = 100
         self.warmup_iterations: int = 10
         self.layout_a: Layout = Layout.ROW_MAJOR
         self.layout_b: Layout = Layout.ROW_MAJOR
@@ -653,7 +659,7 @@ class GemmScan:
 
     def iterations(self, count: int) -> "GemmScan":
         """Set the number of profiling iterations."""
-        self.iterations = count
+        self._iterations = count
         # Update the profile_config with the same number of iterations
         self.profile_config.iterations = count
         return self
@@ -1043,9 +1049,7 @@ class GemmPlotter(OperationPlotter):
         return "M"
 
     @classmethod
-    def calculate_roofline_data(
-        cls, result_set: ProfileResultSet, accelerator_spec: AcceleratorSpec
-    ) -> "pl.DataFrame":
+    def calculate_roofline_data(cls, result_set: ProfileResultSet) -> "pl.DataFrame":
         """
         Calculate data needed for roofline model visualization for GEMM operations.
 
@@ -1062,9 +1066,19 @@ class GemmPlotter(OperationPlotter):
             log.warning("No results in result_set")
             return pl.DataFrame()
 
+        kernel_spec = result_set.kernel_spec
+        operation_params = kernel_spec.operation_params
+
+        accelerator_spec = result_set.accelerator_spec
+
         # Get peak performance values from accelerator specs
-        peak_compute = accelerator_spec.get_peak_compute(result_set.get_data_type())
+        peak_compute = accelerator_spec.get_peak_compute(
+            kernel_spec.data_type
+        ).to_giga()
         peak_bandwidth = accelerator_spec.peak_bandwidth
+        arithmetic_intensity = calculate_arithmetic_intensity(
+            operation_params, kernel_spec.data_type
+        )
 
         # Get the dataframe from the result_set
         df = result_set.results_as_dataframe
@@ -1073,40 +1087,49 @@ class GemmPlotter(OperationPlotter):
             log.warning("Empty dataframe in result_set")
             return pl.DataFrame()
 
-        log.info(f"Initial dataframe has {len(df)} rows")
-        log.info(df)
+        memory_constraint = GigaBytesPerSecond(
+            peak_bandwidth.value * arithmetic_intensity.value
+        )
+        df = df.with_columns(
+            [
+                pl.lit(operation_params.m).alias("m"),
+                pl.lit(operation_params.n).alias("n"),
+                pl.lit(operation_params.k).alias("k"),
+                pl.lit(kernel_spec.data_type).alias("data_type"),
+                pl.lit(peak_compute.value).alias("peak_compute_value"),
+                pl.lit(peak_compute.symbol).alias("peak_compute_unit"),
+                pl.lit(peak_bandwidth.value).alias("peak_bandwidth_value"),
+                pl.lit(peak_bandwidth.symbol).alias("peak_bandwidth_unit"),
+                pl.lit(arithmetic_intensity.value).alias("arithmetic_intensity_value"),
+                pl.lit(arithmetic_intensity.symbol).alias("arithmetic_intensity_unit"),
+                pl.lit(memory_constraint.value).alias("memory_constraint_value"),
+                pl.lit(memory_constraint.symbol).alias("memory_constraint_unit"),
+            ]
+        )
 
-        return pl.DataFrame()
-        # # Calculate arithmetic intensity using the function from operations/gemm.py
-        # # We use map_elements to apply it to each row in a struct
-        # df = df.with_columns(
-        #     [
-        #         pl.struct(["M", "N", "K", "data_type"])
-        #         .map_elements(
-        #             lambda row: calculate_arithmetic_intensity(
-        #                 GemmParams(m=row["M"], n=row["N"], k=row["K"]),
-        #                 DataType.from_string(row["data_type"]),
-        #             ),
-        #             return_dtype=pl.Float64,
-        #         )
-        #         .alias("arithmetic_intensity")
-        #     ]
-        # )
+        # Create a unique group identifier for each configuration
+        df = df.with_columns(
+            [
+                (
+                    pl.col("m").cast(pl.Utf8)
+                    + "_"
+                    + pl.col("n").cast(pl.Utf8)
+                    + "_"
+                    + pl.col("k").cast(pl.Utf8)
+                ).alias("group")
+            ]
+        )
 
-        # # Create a unique group identifier for each configuration
-        # df = df.with_columns(
-        #     [
-        #         (
-        #             pl.col("M").cast(pl.Utf8)
-        #             + "_"
-        #             + pl.col("N").cast(pl.Utf8)
-        #             + "_"
-        #             + pl.col("K").cast(pl.Utf8)
-        #         ).alias("group")
-        #     ]
-        # )
+        # Calculate attainable performance (min of compute peak and memory constraint)
+        df = df.with_columns(
+            [
+                pl.min_horizontal(
+                    pl.col("peak_compute_value"), pl.col("memory_constraint_value")
+                ).alias("attainable_performance_value")
+            ]
+        )
 
-        # # Calculate memory constraint line using units
+        # Calculate memory constraint line using units
         # df = df.with_columns(
         #     [
         #         (peak_bandwidth * pl.col("arithmetic_intensity")).alias(
@@ -1115,22 +1138,28 @@ class GemmPlotter(OperationPlotter):
         #     ]
         # )
 
-        # # Calculate attainable performance (min of compute peak and memory constraint)
+        # Calculate arithmetic intensity using the function from operations/gemm.py
+        # We use map_elements to apply it to each row in a struct
         # df = df.with_columns(
         #     [
-        #         pl.min_horizontal(
-        #             peak_compute, peak_bandwidth * pl.col("arithmetic_intensity")
-        #         ).alias("attainable_performance")
-        #     ]
-        # )
-
-        # df = df.with_columns(
-        #     [
-        #         pl.col("compute_rate")
+        #         pl.struct(["m", "n", "k", "data_type"])
         #         .map_elements(
-        #             lambda gflops: GigaFlops(gflops).to(TeraFlops).base_value,
+        #             lambda row: calculate_arithmetic_intensity(
+        #                 GemmParams(
+        #                     m=row["m"],
+        #                     n=row["n"],
+        #                     k=row["k"],
+        #                 ),
+        #                 kernel_spec.data_type,
+        #             ),
         #             return_dtype=pl.Float64,
         #         )
+        #         .alias("arithmetic_intensity")
+        #     ]
+        # )
+        # df = df.with_columns(
+        #     [
+        #         pl.col("compute_performance")
         #     ]
         # )
 
@@ -1184,7 +1213,7 @@ class GemmPlotter(OperationPlotter):
         #     elif "gflops" in df.columns:
         #         log.debug(f"Sample gflops values: {df['gflops'].to_list()[:3]}")
 
-        # return df
+        return df
 
 
 ## should be at the end of the file

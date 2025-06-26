@@ -12,7 +12,7 @@ import polars as pl
 
 from kernel_scan.core.logging import get_logger
 from kernel_scan.core.specs import AcceleratorSpec, KernelSpec
-from kernel_scan.core.units import BytesPerSecond, GigaFlops, Microsecond
+from kernel_scan.core.units import BytesPerSecond, GigaFlopsPerSecond, MicroSecond
 
 log = get_logger(__name__)
 
@@ -25,12 +25,12 @@ class Metrics:
     Attributes:
         latency: units.Microsecond. Time taken by the kernel to execute.
         memory_bandwidth: units.BytesPerSecond. Memory bandwidth achieved.
-        compute_rate: units.GFLOPS. Compute rate achieved.
+        compute_performance: units.GFLOPS. Compute rate achieved.
     """
 
-    latency: Microsecond
+    latency: MicroSecond
     memory_bandwidth: BytesPerSecond
-    compute_rate: GigaFlops
+    compute_performance: GigaFlopsPerSecond
 
     def get(self, attr_name: str, default=None):
         """Get attribute value by name, returning default if not found."""
@@ -70,12 +70,6 @@ class ProfileResult:
         # Add basic properties
         result_dict["is_best"] = self.is_best
 
-        result_dict["data_type"] = self.kernel_spec.data_type.name
-
-        result_dict["kernel_name"] = self.kernel_spec.name
-
-        result_dict["operation_type"] = self.kernel_spec.operation_type.name
-
         # Extract metrics properties
         result_dict["latency_value"] = self.metrics.latency.value
         result_dict["latency_unit"] = self.metrics.latency.symbol
@@ -83,8 +77,12 @@ class ProfileResult:
         result_dict["memory_bandwidth_value"] = self.metrics.memory_bandwidth.value
         result_dict["memory_bandwidth_unit"] = self.metrics.memory_bandwidth.symbol
 
-        result_dict["compute_rate_value"] = self.metrics.compute_rate.value
-        result_dict["comput_rate_unit"] = self.metrics.compute_rate.symbol
+        result_dict["compute_performance_value"] = (
+            self.metrics.compute_performance.value
+        )
+        result_dict["compute_performance_unit"] = (
+            self.metrics.compute_performance.symbol
+        )
 
         return result_dict
 
@@ -188,7 +186,7 @@ class ProfileResultSet:
         Mark the best results in each group based on a metric.
 
         Args:
-            metric: Metric to use for comparison (e.g., 'latency', 'compute_rate')
+            metric: Metric to use for comparison (e.g., 'latency', 'compute_performance')
             lower_is_better: Whether lower values of the metric are better
         """
         if not self._results:

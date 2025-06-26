@@ -529,14 +529,37 @@ class Flop(Unit):
 class Flops(Unit):
     """Represents floating-point operations per second."""
 
-    dimension = Dimension("compute_rate")
+    dimension = Dimension("compute_performance")
     base_name = "flops"
-    base_symbol = "FLOPS"
+    base_symbol = "FLOP/s"
     _prefix = Prefix.NONE
 
     def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
         """Convert FLOPS to the target unit's base value."""
+        if target_unit_class == Flop:
+            # FLOPS * Second = FLOP (total operations)
+            return self.base_value
+        elif target_unit_class == Second:
+            # For division: FLOPS / FLOP = 1/Second
+            return 1.0 / self.base_value
+        elif target_unit_class == Op or target_unit_class == Ops:
+            # Allow conversion between generic operations and floating-point operations
+            return self.base_value
         return self.base_value
+
+    def __mul__(self, other: Union["Unit", float, int]) -> "Unit":
+        """Multiply FLOPS by another unit or scalar."""
+        if isinstance(other, Second):
+            # FLOPS * Second = FLOP (total operations)
+            return Flop(self.base_value * other.base_value)
+        return super().__mul__(other)
+
+    def __truediv__(self, other: Union["Unit", float, int]) -> "Unit":
+        """Divide FLOPS by another unit or scalar."""
+        if isinstance(other, Flop):
+            # FLOPS / FLOP = 1/Second
+            return Second(1.0 / (self.base_value / other.base_value))
+        return super().__truediv__(other)
 
 
 class MegaFlops(Flops):
@@ -570,6 +593,37 @@ class PetaFlops(Flops):
     """Represents petaFLOPS (convenience class)."""
 
     _prefix = Prefix.PETA
+
+    def __init__(self, value: float):
+        super().__init__(value, self._prefix)
+
+
+class FlopsPerSecond(Unit):
+    """Represents floating-point operations per second."""
+
+    dimension = Dimension("compute_performance")
+    base_name = "flops per second"
+    base_symbol = "FLOPS/s"
+    _prefix = Prefix.NONE
+
+    def _convert_to_base_value(self, target_unit_class: Type[Unit]) -> float:
+        """Convert FLOPS per second to the target unit's base value."""
+        return self.base_value
+
+
+class GigaFlopsPerSecond(FlopsPerSecond):
+    """Represents gigaFLOPS per second (convenience class)."""
+
+    _prefix = Prefix.GIGA
+
+    def __init__(self, value: float):
+        super().__init__(value, self._prefix)
+
+
+class TeraFlopsPerSecond(FlopsPerSecond):
+    """Represents teraFLOPS per second (convenience class)."""
+
+    _prefix = Prefix.TERA
 
     def __init__(self, value: float):
         super().__init__(value, self._prefix)
@@ -672,7 +726,7 @@ class Iop(Unit):
 class Iops(Unit):
     """Represents integer operations per second."""
 
-    dimension = Dimension("compute_rate")
+    dimension = Dimension("compute_performance")
     base_name = "iops"
     base_symbol = "IOPS"
     _prefix = Prefix.NONE
@@ -770,7 +824,7 @@ class Op(Unit):
 class Ops(Unit):
     """Represents generic operations per second."""
 
-    dimension = Dimension("compute_rate")
+    dimension = Dimension("compute_performance")
     base_name = "ops"
     base_symbol = "OPS"
     _prefix = Prefix.NONE

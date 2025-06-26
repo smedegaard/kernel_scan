@@ -503,7 +503,7 @@ class ComposableKernelEngine(ComputeEngine):
 
         # For compute rate: convert TeraFLOPS to GigaFlops
         tflops_value = float(profile_data.get("tflops", 0.0))
-        compute_rate = TeraFlops(tflops_value).to(GigaFlops)
+        compute_performance = TeraFlops(tflops_value).to(GigaFlops)
 
         # For memory bandwidth: use GigaBytesPerSecond
         gb_per_sec_value = float(profile_data.get("gb_per_sec", 0.0))
@@ -513,7 +513,7 @@ class ComposableKernelEngine(ComputeEngine):
         metrics = Metrics(
             latency=latency,
             memory_bandwidth=memory_bandwidth,
-            compute_rate=compute_rate,
+            compute_performance=compute_performance,
         )
 
         result = ProfileResult(

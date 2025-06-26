@@ -27,6 +27,7 @@ from kernel_scan.core.types import (
     OperationParams,
     OperationType,
 )
+from kernel_scan.core.units import GigaByte, GigaBytesPerSecond, TeraFlops, TeraIops
 
 log = get_logger(__name__)
 
@@ -233,6 +234,7 @@ class KernelSpec(ABC):
     iterations: int = 10
     name: Optional[str] = None
     workspace_size: Optional[int] = None
+    operation_params: OperationParams
 
     @property
     @abstractmethod
@@ -389,15 +391,11 @@ class AcceleratorSpec:
     additional_specs: Dict[str, any] = field(default_factory=dict)
 
     @property
-    def peak_bandwidth(self) -> float:
+    def peak_bandwidth(self) -> GigaBytesPerSecond:
         """Return peak memory bandwidth in GB/s."""
-        return (
-            self.peak_memory_bandwidth_gbps
-            if self.peak_memory_bandwidth_gbps is not None
-            else 0.0
-        )
+        return self.peak_memory_bandwidth_gbps
 
-    def get_peak_compute(self, precision: DataType = DataType.FLOAT32) -> float:
+    def get_peak_compute(self, precision: DataType) -> TeraFlops:
         """
         Get peak compute performance for the specified precision.
 
@@ -406,15 +404,17 @@ class AcceleratorSpec:
 
         Returns:
             Peak compute performance in TFLOPS
+
+        Raises:
+            ValueError: If no peak performance data is available for the specified precision
         """
 
         if precision in self.peak_performance:
             return self.peak_performance[precision]
         else:
-            log.warning(
-                f"No peak performance data for {precision.name} on {self.name}. Using FLOAT32 as fallback."
+            raise ValueError(
+                f"No peak performance data for {precision.name} on {self.name}"
             )
-            return self.peak_performance.get(DataType.FLOAT32, 0.0)
 
     @staticmethod
     def detect_hardware() -> "AcceleratorSpec":
@@ -504,13 +504,14 @@ GPU_SPECS = {
     "AMD": {
         "Radeon RX 7900 XTX": {
             "name": "Radeon RX 7900 XTX",
-            "peak_memory_bandwidth_gbps": 960.0,
+            "peak_memory_bandwidth_gbps": GigaBytesPerSecond(960.0),
             "peak_performance": {
-                DataType.FLOAT32: 61.4,  # FP32 TFLOPS
-                DataType.FLOAT16: 122.8,  # FP16 TFLOPS (2x FP32)
-                DataType.INT8: 245.6,  # INT8 TOPS (4x FP32)
+                DataType.FLOAT32: TeraFlops(61.4),  # FP32 TFLOPS
+                DataType.FLOAT16: TeraFlops(122.8),  # FP16 TFLOPS
+                DataType.BFLOAT16: TeraFlops(122.8),  # BF16 TFLOPS
+                DataType.INT8: TeraIops(245.6),  # INT8 TOPS
             },
-            "memory_size_gb": 24.0,
+            "memory_size_gb": GigaByte(24.0),
             "additional_specs": {
                 "stream_processors": 12288,
                 "compute_units": 96,
@@ -522,15 +523,15 @@ GPU_SPECS = {
         },
         "Instinct MI250X": {
             "name": "AMD Instinct MI250X",
-            "peak_memory_bandwidth_gbps": 3200.0,
+            "peak_memory_bandwidth_gbps": GigaBytesPerSecond(3200.0),
             "peak_performance": {
-                DataType.FLOAT64: 47.9,  # FP64 TFLOPS
-                DataType.FLOAT32: 95.7,  # FP32 TFLOPS
-                DataType.FLOAT16: 383.0,  # FP16 TFLOPS
-                DataType.BFLOAT16: 383.0,  # BF16 TFLOPS
-                DataType.INT8: 766.0,  # INT8 TOPS
+                DataType.FLOAT64: TeraFlops(47.9),  # FP64 TFLOPS
+                DataType.FLOAT32: TeraFlops(95.7),  # FP32 TFLOPS
+                DataType.FLOAT16: TeraFlops(383.0),  # FP16 TFLOPS
+                DataType.BFLOAT16: TeraFlops(383.0),  # BF16 TFLOPS
+                DataType.INT8: TeraIops(766.0),  # INT8 TOPS
             },
-            "memory_size_gb": 128.0,
+            "memory_size_gb": GigaByte(128.0),
             "additional_specs": {
                 "stream_processors": 14080,
                 "compute_units": 220,
@@ -542,15 +543,15 @@ GPU_SPECS = {
         },
         "Instinct MI300X": {
             "name": "AMD Instinct MI300X",
-            "peak_memory_bandwidth_gbps": 5300.0,  # 5.3 TB/s
+            "peak_memory_bandwidth_gbps": GigaBytesPerSecond(5.3),  # 5.3 TB/s
             "peak_performance": {
-                DataType.FLOAT64: 152.8,  # FP64 TFLOPS
-                DataType.FLOAT32: 305.6,  # FP32 TFLOPS
-                DataType.FLOAT16: 611.2,  # FP16 TFLOPS
-                DataType.BFLOAT16: 611.2,  # BF16 TFLOPS
-                DataType.INT8: 1222.4,  # INT8 TOPS
+                DataType.FLOAT64: TeraFlops(152.8),  # FP64 TFLOPS
+                DataType.FLOAT32: TeraFlops(305.6),  # FP32 TFLOPS
+                DataType.FLOAT16: TeraFlops(611.2),  # FP16 TFLOPS
+                DataType.BFLOAT16: TeraFlops(611.2),  # BF16 TFLOPS
+                DataType.INT8: TeraIops(1222.4),  # INT8 TOPS
             },
-            "memory_size_gb": 192.0,
+            "memory_size_gb": GigaByte(192.0),
             "additional_specs": {
                 "stream_processors": 304 * 256,  # 304 CUs * 256 SPs per CU
                 "compute_units": 304,
@@ -566,16 +567,16 @@ GPU_SPECS = {
     "NVIDIA": {
         "A100": {
             "name": "NVIDIA A100",
-            "peak_memory_bandwidth_gbps": 2039.0,
+            "peak_memory_bandwidth_gbps": GigaBytesPerSecond(2039.0),
             "peak_performance": {
-                DataType.FLOAT64: 9.7,  # FP64 TFLOPS
-                DataType.FLOAT32: 19.5,  # FP32 TFLOPS
-                DataType.FLOAT16: 312.0,  # FP16 TFLOPS (with Tensor Cores)
-                DataType.BFLOAT16: 312.0,  # BF16 TFLOPS (with Tensor Cores)
-                DataType.INT8: 624.0,  # INT8 TOPS (with Tensor Cores)
-                DataType.INT4: 1248.0,  # INT4 TOPS (with Tensor Cores)
+                DataType.FLOAT64: TeraFlops(9.7),  # FP64 TFLOPS
+                DataType.FLOAT32: TeraFlops(19.5),  # FP32 TFLOPS
+                DataType.FLOAT16: TeraFlops(312.0),  # FP16 TFLOPS (with Tensor Cores)
+                DataType.BFLOAT16: TeraFlops(312.0),  # BF16 TFLOPS (with Tensor Cores)
+                DataType.INT8: TeraIops(624.0),  # INT8 TOPS (with Tensor Cores)
+                DataType.INT4: TeraIops(1248.0),  # INT4 TOPS (with Tensor Cores)
             },
-            "memory_size_gb": 80.0,
+            "memory_size_gb": GigaByte(80.0),
             "additional_specs": {
                 "cuda_cores": 6912,
                 "tensor_cores": 432,
@@ -587,15 +588,15 @@ GPU_SPECS = {
         },
         "H100": {
             "name": "NVIDIA H100",
-            "peak_memory_bandwidth_gbps": 3350.0,
+            "peak_memory_bandwidth_gbps": GigaBytesPerSecond(3350.0),
             "peak_performance": {
-                DataType.FLOAT64: 67.0,  # FP64 TFLOPS (with Tensor Cores)
-                DataType.FLOAT32: 67.0,  # FP32 TFLOPS
-                DataType.FLOAT16: 989.0,  # FP16 TFLOPS (with Tensor Cores)
-                DataType.BFLOAT16: 989.0,  # BF16 TFLOPS (with Tensor Cores)
-                DataType.INT8: 1979.0,  # INT8 TOPS (with Tensor Cores)
+                DataType.FLOAT64: TeraFlops(67.0),  # FP64 TFLOPS (with Tensor Cores)
+                DataType.FLOAT32: TeraFlops(67.0),  # FP32 TFLOPS
+                DataType.FLOAT16: TeraFlops(989.0),  # FP16 TFLOPS (with Tensor Cores)
+                DataType.BFLOAT16: TeraFlops(989.0),  # BF16 TFLOPS (with Tensor Cores)
+                DataType.INT8: TeraIops(1979.0),  # INT8 TOPS (with Tensor Cores)
             },
-            "memory_size_gb": 80.0,
+            "memory_size_gb": GigaByte(80.0),
             "additional_specs": {
                 "cuda_cores": 16896,
                 "tensor_cores": 528,

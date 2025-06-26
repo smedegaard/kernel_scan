@@ -27,7 +27,7 @@ class ProfileConfig:
     """
 
     custom_profiler_path: Optional[str] = None
-    iterations: int = 100
+    iterations: int = 10
     warmup_iterations: int = 10
     verify_results: bool = True
     verification_tolerance: float = 1e-5

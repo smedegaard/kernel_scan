@@ -126,13 +126,6 @@ class Profiler:
 
         engine_result_set.engine_name = engine.name
 
-        # Create a new ProfileResultSet with the result and kernel_spec
-        # result_set = ProfileResultSet(
-        #     results=[result],
-        #     accelerator_spec=self._accelerator_spec,
-        #     kernel_spec=self._kernel_spec,
-        # )
-
         self._result_set = engine_result_set
 
         return self._result_set

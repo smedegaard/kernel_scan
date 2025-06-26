@@ -24,7 +24,6 @@ try:
         Flops,
         FlopsPerByte,
         GigaByte,
-        GigaBytesPerSecond,
         GigaFlops,
         KiloByte,
         MegaByte,
@@ -35,7 +34,6 @@ try:
         Second,
         TeraFlops,
     )
-    from kernel_scan.operations.gemm import calculate_arithmetic_intensity
 except ImportError as e:
     raise e
 
@@ -104,6 +102,13 @@ class TestUnitConversion:
         assert micro.value == 500000
         assert micro.prefix == Prefix.MICRO
         assert micro.base_value == 0.5
+
+    def test_tera_to_giga(self):
+        tera = TeraByte(1)
+        giga = tera.to_giga()
+        assert giga.value == 1000.0
+        assert giga.prefix == Prefix.GIGA
+        assert giga.base_value == 1000.0
 
     def test_to_micro_function(self):
         millisecond = MilliSecond(500)
